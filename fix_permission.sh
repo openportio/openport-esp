@@ -1,0 +1,1 @@
+ sudo chown jan:jan /dev/ttyUSB0
