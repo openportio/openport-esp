@@ -1,45 +1,25 @@
-/*
-* esp8266 simple WebSocket server
-* https://www.mischainti.org
-*
-* The server response with the
-* echo of the message you send
-* and send a broadcast every 5secs
-*
-*/
-
 #include <Arduino.h>
-
 #include <ESP8266WiFi.h>
-#include <WebSocketsServer.h>
-#include <EthernetClient.h>
+#include <WebSocketsClient.h>
 
 const char *ssid = "";
 const char *password = "";
-const uint8_t wsPort = 81;
 
 unsigned long messageInterval = 5000;
 bool connected = false;
 
 #define DEBUG_SERIAL Serial
 
-WebSocketsServer webSocket = WebSocketsServer(wsPort);
 WiFiServer server(80);
+WebSocketsClient webSocket;
 
-//EthernetClient tcpClient;
-WiFiClient tcpClient;
+String host = "192.168.1.123";
 
-String getResponse(String request){
-    // if you've gotten to the end of the line (received a newline
-    // character) and the line is blank, the http request has ended,
-    // so you can send a reply
-    // send a standard http response header
-
+String getResponse(char *request) {
     String response = "HTTP/1.1 200 OK";
-
     response += "\nContent-Type: text/html";
     response += "\nConnection: close";  // the connection will be closed after completion of the response
-//                    response += "\nRefresh: 5";  // refresh the page automatically every 5 sec
+    response += "\nRefresh: 5";  // refresh the page automatically every 5 sec
     response += "\n";
     response += "\n<!DOCTYPE HTML>";
     response += "\n<html>";
@@ -53,23 +33,23 @@ void webserverLoop() {
     WiFiClient client = server.available();
     if (client) {
         Serial.println("new client");
-        // an http request ends with a blank line
-        bool currentLineIsBlank = true;
+        // a http request ends with a blank line
         if (client.connected()) {
-            String readString = "";
-            while (!client.available()){
+            char buffer[1024];
+            while (!client.available()) {
                 delay(1);
             }
-            while(client.available()){
-                readString += (char) client.read();
+            int i = 0;
+            while (i < 1024 && client.available()) {
+                buffer[i++] = client.read();
             }
-            Serial.println(readString);
+            Serial.println(buffer);
 
-            String response = getResponse(readString);
+            String response = getResponse(buffer);
             Serial.println("response:");
             Serial.println(response);
             client.print(response);
-        } else{
+        } else {
             Serial.println("client is not connected?");
         }
         // give the web browser time to receive the data
@@ -80,71 +60,80 @@ void webserverLoop() {
     }
 }
 
+void addrFromPayload(char *address, uint8_t *payload) {
+    sprintf(address, "%d.%d.%d.%d:%d", int(payload[0]), int(payload[1]), int(payload[2]), int(payload[3]),
+            int((payload[4] << 8) + payload[5]));
+}
 
 
-void webSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t length) {
+void webSocketEvent(WStype_t type, uint8_t *payload, size_t length) {
     String response2;
 
     switch (type) {
         case WStype_DISCONNECTED:
-            DEBUG_SERIAL.printf("[%u] Disconnected!\n", num);
+            DEBUG_SERIAL.printf("Disconnected!\n");
             break;
-        case WStype_CONNECTED: {
-            IPAddress ip = webSocket.remoteIP(num);
-            DEBUG_SERIAL.printf("[%u] Connected from %d.%d.%d.%d url: %s\n", num, ip[0], ip[1], ip[2], ip[3], payload);
-            // send message to client
-            webSocket.sendTXT(num, "Connected");
-        }
+        case WStype_CONNECTED:
+            DEBUG_SERIAL.println("Websocket is connected");
             break;
         case WStype_TEXT:
-            DEBUG_SERIAL.printf("[%u] RECEIVE TXT: %s\n", num, payload);
+            DEBUG_SERIAL.printf("RECEIVE TXT: %s\n", payload);
             // send message to client
 //            webSocket.sendTXT(num, "(ECHO MESSAGE) " + String((char *) payload));
-            // send data to all connected clients
-            // webSocket.broadcastTXT("message here");
             response2 = getResponse(""); // todo: payload
-            webSocket.sendTXT(num, response2);
-
-//
-//            if (tcpClient.connect(WiFi.localIP(), 80)) {
-//
-//                Serial.println("Connected to local server");
-//                tcpClient.write((char *) payload); // Send what is received from the websocket
-//
-//                // callback to server so it can process the request.
-//                webserverLoop();
-//
-//                // Read the response
-//                String readString = "";
-//                while (tcpClient.available()){
-//                    readString += tcpClient.readString();
-//                }
-//                webSocket.sendTXT(num, readString);
-//
-//                if (!tcpClient.connected()) {
-//                    Serial.println();
-//                    Serial.println("disconnecting.");
-//                    tcpClient.stop();
-//                }
-//            } else {
-//                Serial.println("connection failed");
-//            }
+            webSocket.sendTXT(response2);
             break;
         case WStype_BIN:
-            DEBUG_SERIAL.printf("[%u] get binary length: %u\n", num, length);
-            hexdump(payload, length);
-            // send message to client
-            // webSocket.sendBIN(num, payload, length);
+            DEBUG_SERIAL.printf("get binary length: %u\n", length);
+            if (length > 6) {
+                char address[23];
+                addrFromPayload(address, payload);
+                uint8 chop = payload[6];
+                if (length == 7) {
+                    DEBUG_SERIAL.printf("Got new connection from %s. Channel Operation: %d\n", address, chop);
+                }
+                if (length > 7) {
+                    DEBUG_SERIAL.printf("Got new message of length %d from %s. Channel Operation: %d\n", length,
+                                        address, chop);
+                    String response = getResponse((char *) &(payload[7]));
+                    char response_char[response.length() + 7];
+                    memcpy(response_char, payload, sizeof(payload[0]) * 6);
+                    response_char[6] = 2;
+                    int i = 0;
+                    while (i < response.length()) {
+                        response_char[7 + i] = response[i];
+                        i++;
+                    }
+                    webSocket.sendBIN((const uint8_t *) response_char, response.length() + 6);
+
+                    // Send close
+                    response_char[6] = 3;
+                    webSocket.sendBIN((const uint8_t *) response_char, 7);
+                }
+            } else {
+                DEBUG_SERIAL.printf("Got a short message: %d", length);
+            }
+
             break;
     }
 }
 
+void connectToOpenport() {
+    webSocket.begin(host, 8081, "/");
+    webSocket.onEvent(webSocketEvent);
+//     use HTTP Basic Authorization this is optional remove if not needed
+//    webSocket.setAuthorization("user", "Password");
 
+    // try ever 5000 again if connection has failed
+    webSocket.setReconnectInterval(5000);
+    webSocket.enableHeartbeat(15000, 3000, 2);
+    Serial.print("Connecting to attempted to");
+    Serial.println(host);
+}
 
 void setup() {
     DEBUG_SERIAL.begin(115200);
-
-//  DEBUG_SERIAL.setDebugOutput(true);
+    DEBUG_SERIAL.setDebugOutput(true);
 
     DEBUG_SERIAL.println();
     DEBUG_SERIAL.println();
@@ -163,34 +152,21 @@ void setup() {
         Serial.print(".");
     }
 
-    DEBUG_SERIAL.println("WebSocket complete uri is: ");
-    DEBUG_SERIAL.print("ws://");
-    DEBUG_SERIAL.print(WiFi.localIP());
-    DEBUG_SERIAL.print(":");
-    DEBUG_SERIAL.print(wsPort);
-    DEBUG_SERIAL.println("/");
+    DEBUG_SERIAL.println("My IP:");
+    DEBUG_SERIAL.println(WiFi.localIP());
 
-    webSocket.begin();
-    webSocket.onEvent(webSocketEvent);
-
+    connectToOpenport();
     server.begin();
-
 }
-
 
 unsigned long lastUpdate = millis();
 
 void loop() {
     webSocket.loop();
-//    if (lastUpdate + messageInterval < millis()) {
-//        DEBUG_SERIAL.println("[WSc] SENT: Simple broadcast client message!!");
-//        webSocket.broadcastTXT("Simple broadcast client message!!");
-//        lastUpdate = millis();
-//    }
-
+    if (lastUpdate + messageInterval < millis()) {
+        Serial.printf("is connected: %u\n", webSocket.isConnected());
+        lastUpdate = millis();
+    }
     webserverLoop();
+    delay(10);
 }
-
-//#include <WiFi.h>
-
-
