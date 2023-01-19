@@ -1,6 +1,8 @@
 #include <Arduino.h>
 #include <ESP8266WiFi.h>
 #include <WebSocketsClient.h>
+#include <ESP8266HTTPClient.h>
+#include <ArduinoJson.h>
 
 const char *ssid = "";
 const char *password = "";
@@ -13,7 +15,13 @@ bool connected = false;
 WiFiServer server(80);
 WebSocketsClient webSocket;
 
-String host = "192.168.1.123";
+const char* host = "test.openport.io";
+
+const char* OPENPORT_SERVER = "https://test.openport.io";
+const char* FINGERPRINT = "3F 51 88 B5 B3 06 42 24 1A 7E 03 E8 27 47 D5 0B 3D EC 53 70";
+const char* OPENPORT_WS_TOKEN = "blahblahblah";
+int server_port = -1;
+String session_token = "to be set";
 
 String getResponse(char *request) {
     String response = "HTTP/1.1 200 OK";
@@ -68,6 +76,8 @@ void addrFromPayload(char *address, uint8_t *payload) {
 
 void webSocketEvent(WStype_t type, uint8_t *payload, size_t length) {
     String response2;
+    DynamicJsonDocument doc(2000);
+    String jsonStr;
 
     switch (type) {
         case WStype_DISCONNECTED:
@@ -75,6 +85,14 @@ void webSocketEvent(WStype_t type, uint8_t *payload, size_t length) {
             break;
         case WStype_CONNECTED:
             DEBUG_SERIAL.println("Websocket is connected");
+
+            doc["token"] = session_token;
+            doc["port"]   = server_port;
+
+            serializeJson(doc, jsonStr);
+            DEBUG_SERIAL.println("sending ");
+            DEBUG_SERIAL.println(jsonStr);
+            webSocket.sendTXT(jsonStr);
             break;
         case WStype_TEXT:
             DEBUG_SERIAL.printf("RECEIVE TXT: %s\n", payload);
@@ -118,8 +136,38 @@ void webSocketEvent(WStype_t type, uint8_t *payload, size_t length) {
     }
 }
 
-void connectToOpenport() {
-    webSocket.begin(host, 8081, "/");
+void connectToOpenport(const char* server, const char* ws_token) {
+    HTTPClient httpClient;
+    char path[128];
+    sprintf(path, "%s/api/v1/request-port", server);
+    Serial.print("post to  ");
+    Serial.println(path);
+    httpClient.begin(String(path), FINGERPRINT);
+    httpClient.addHeader("Content-Type", "application/x-www-form-urlencoded");
+    char postData[128];
+    sprintf(postData, "ws_token=%s",ws_token);
+    Serial.println(postData);
+    int responseCode = httpClient.POST(postData);
+    if (responseCode>0) {
+        Serial.print("HTTP Response code: ");
+        Serial.println(responseCode);
+        String payload = httpClient.getString();
+        Serial.println(payload);
+
+        DynamicJsonDocument doc(1024);
+        deserializeJson(doc, payload);
+        server_port = doc["server_port"];
+        session_token = doc["session_token"].as<String>();
+    }
+    else {
+        Serial.print("Error code: ");
+        Serial.println(responseCode);
+    }
+    // Free resources
+    httpClient.end();
+
+
+    webSocket.beginSSL(host, 443, "/ws");
     webSocket.onEvent(webSocketEvent);
 //     use HTTP Basic Authorization this is optional remove if not needed
 //    webSocket.setAuthorization("user", "Password");
@@ -127,7 +175,7 @@ void connectToOpenport() {
     // try ever 5000 again if connection has failed
     webSocket.setReconnectInterval(5000);
     webSocket.enableHeartbeat(15000, 3000, 2);
-    Serial.print("Connecting to attempted to");
+    Serial.print("Connecting to attempted to ");
     Serial.println(host);
 }
 
@@ -155,7 +203,7 @@ void setup() {
     DEBUG_SERIAL.println("My IP:");
     DEBUG_SERIAL.println(WiFi.localIP());
 
-    connectToOpenport();
+    connectToOpenport(OPENPORT_SERVER, OPENPORT_WS_TOKEN);
     server.begin();
 }
 
