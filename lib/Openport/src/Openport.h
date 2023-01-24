@@ -25,6 +25,7 @@ public:
     void loop();
 private:
     char *_host;
+    String _ws_host;
     char *_key_token;
     String _session_token{};
     int _server_port{};
@@ -36,6 +37,7 @@ private:
     void webSocketMessage(websockets::WebsocketsMessage message);
     bool sendHttpRequest();
     void requestWSPortForward();
+    bool connectWS();
 };
 
 void setTimeUsingSNTP();

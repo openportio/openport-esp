@@ -51,14 +51,9 @@ const char ssl_ca_cert[] PROGMEM = \
 "jjxDah2nGN59PRbxYvnKkKj9\n" \
 "-----END CERTIFICATE-----\n";
 
-// test.openport.io
-const char *FINGERPRINT = "3F 51 88 B5 B3 06 42 24 1A 7E 03 E8 27 47 D5 0B 3D EC 53 70";
-
-
 X509List *serverTrustedCA = new X509List(ssl_ca_cert);
 
 WiFiClientSecure wifiClient;
-
 
 Openport::Openport(char *host, char *key_token, f_string on_message) {
     _host = host;
@@ -133,67 +128,7 @@ void Openport::requestWSPortForward() {
     _webSocket.send(jsonStr.c_str());
 }
 
-//
-//void Openport::webSocketEvent(WStype_t type, uint8_t *payload, size_t length) {
-//    String response2;
-//    DynamicJsonDocument doc(2000);
-//    String jsonStr;
-//
-//    switch (type) {
-//        case WStype_DISCONNECTED:
-//            DEBUG_SERIAL.printf("Disconnected!\n");
-//            break;
-//        case WStype_CONNECTED:
-//            DEBUG_SERIAL.println("Websocket is connected");
-//
-//            doc["token"] = _session_token;
-//            doc["port"]   = _server_port;
-//
-//            serializeJson(doc, jsonStr);
-//            DEBUG_SERIAL.println("sending ");
-//            DEBUG_SERIAL.println(jsonStr);
-//            _webSocket.sendTXT(jsonStr);
-//            break;
-//        case WStype_TEXT:
-//            DEBUG_SERIAL.printf("RECEIVE TXT: %s\n", payload);
-//            break;
-//        case WStype_BIN:
-//            DEBUG_SERIAL.printf("get binary length: %u\n", length);
-//            if (length > 6) {
-//                char address[23];
-//                addrFromPayload(address, payload);
-//                uint8 chop = payload[6];
-//                if (length == 7) {
-//                    DEBUG_SERIAL.printf("Got new connection from %s. Channel Operation: %d\n", address, chop);
-//                }
-//                if (length > 7) {
-//                    DEBUG_SERIAL.printf("Got new message of length %d from %s. Channel Operation: %d\n", length,
-//                                        address, chop);
-//                    String response = _on_message((char *) &(payload[7]));
-//                    char response_char[response.length() + 7];
-//                    memcpy(response_char, payload, sizeof(payload[0]) * 6);
-//                    response_char[6] = 2;
-//                    int i = 0;
-//                    while (i < response.length()) {
-//                        response_char[7 + i] = response[i];
-//                        i++;
-//                    }
-//                    _webSocket.sendBIN((const uint8_t *) response_char, response.length() + 6);
-//
-//                    // Send close
-//                    response_char[6] = 3;
-//                    _webSocket.sendBIN((const uint8_t *) response_char, 7);
-//                }
-//            } else {
-//                DEBUG_SERIAL.printf("Got a short message: %d", length);
-//            }
-//
-//            break;
-//    }
-//}
-
 // TODO: keep track of connection status with ping/pong
-
 
 bool Openport::sendHttpRequest(){
 
@@ -218,6 +153,7 @@ bool Openport::sendHttpRequest(){
         deserializeJson(doc, payload);
         _server_port = doc["server_port"];
         _session_token = doc["session_token"].as<String>();
+        _ws_host = doc["server_ip"].as<String>();
     }
     else {
         Serial.print("HTTP Response code: ");
@@ -231,19 +167,12 @@ bool Openport::sendHttpRequest(){
     return true;
 }
 
-bool Openport::connect() {
-    if (!sendHttpRequest()) {
-        return false;
-    }
-
-    // Connect websocket
-
-    #ifdef ESP8266
-//    _webSocket.setTrustAnchors(serverTrustedCA);
-    #elif defined(ESP32)
-//    setCACert(ssl_ca_cert);
-    #endif
-
+bool Openport::connectWS() {// Connect websocket
+#ifdef ESP8266
+    _webSocket.setTrustAnchors(serverTrustedCA);
+#elif defined(ESP32)
+    //    setCACert(ssl_ca_cert);
+#endif
     std::function<void(websockets::WebsocketsMessage)> onMessageCallback =
             std::bind(&Openport::webSocketMessage, this, std::placeholders::_1);
     std::function<void(websockets::WebsocketsEvent, String)> onEventCallback =
@@ -253,14 +182,12 @@ bool Openport::connect() {
     _webSocket.onEvent(onEventCallback);
 
     char fullPath[128];
-    sprintf(fullPath, "wss://%s:443/ws", _host);
+    sprintf(fullPath, "wss://%s:443/ws", _ws_host.c_str());
     Serial.print("WS Connecting to ");
     Serial.println(fullPath);
 
-    // todo: only insecure after certificate expiration date
-    _webSocket.setInsecure();
-//    _webSocket.setFingerprint(FINGERPRINT);
-//    bool connected = _webSocket.connect(fullPath);
+    // todo: set insecure after certificate expiration date
+//    _webSocket.setInsecure();
     bool connected = _webSocket.connect(fullPath);
     if (!connected) {
         Serial.println("WS Connect failed");
@@ -280,12 +207,18 @@ bool Openport::connect() {
         Serial.println("WS Ping succeeded");
     }
 
-//    requestWSPortForward();
 //    _webSocket.setReconnectInterval(5000);
 //    _webSocket.enableHeartbeat(15000, 3000, 2);
     Serial.print("Connecting attempted to ");
     Serial.println(_host);
     return true;
+}
+
+bool Openport::connect() {
+    if (!sendHttpRequest()) {
+        return false;
+    }
+    return connectWS();
 }
 
 unsigned long messageInterval = 5000;
