@@ -2,7 +2,7 @@
 // Created by Jan De Bleser on 19/01/23.
 //
 
-#include "Openport.h"
+#include "OpenportClient.h"
 //#include <ArduinoJson.h>
 #include "../../../.pio/libdeps/Debug/ArduinoJson/ArduinoJson.h"
 
@@ -55,10 +55,10 @@ X509List *serverTrustedCA = new X509List(ssl_ca_cert);
 
 WiFiClientSecure wifiClient;
 
-Openport::Openport(char *host, char *key_token, f_string on_message) {
+OpenportClient::OpenportClient(char *host, char *key_token) {
     _host = host;
     _key_token = key_token;
-    _on_message = on_message;
+    _messages = std::deque< OpenportMessage* >();
     wifiClient.setTrustAnchors(serverTrustedCA);
 }
 
@@ -67,7 +67,17 @@ void addrFromPayload(char *address, const char *payload) {
             int((payload[4] << 8) + payload[5]));
 }
 
-void Openport::webSocketMessage(const websockets::WebsocketsMessage message) {
+void OpenportClient::send(OpenportMessage *msg) {
+    DEBUG_SERIAL.println("OpenportClient::Sending message: ");
+    DEBUG_SERIAL.println(msg->getPayload());
+    DEBUG_SERIAL.println("OpenportClient::Raw message: ");
+    const std::unique_ptr<char> rawDataPtr = msg->getRawData();
+    char *rawData = rawDataPtr.get();
+    DEBUG_SERIAL.println(rawData);
+    _webSocket.sendBinary(rawData, msg->getRawDataLength());
+}
+
+void OpenportClient::webSocketMessage(const websockets::WebsocketsMessage message) {
     Serial.print("Got Message: ");
     Serial.println(message.data());
 
@@ -76,48 +86,29 @@ void Openport::webSocketMessage(const websockets::WebsocketsMessage message) {
 
     DEBUG_SERIAL.printf("get binary length: %u\n", length);
     if (length > 6) {
-        char address[23];
-        addrFromPayload(address, payload);
-        uint8 chop = payload[6];
-        if (length == 7) {
-            DEBUG_SERIAL.printf("Got new connection from %s. Channel Operation: %d\n", address, chop);
-        }
-        if (length > 7) {
-            DEBUG_SERIAL.printf("Got new message of length %d from %s. Channel Operation: %d\n", length,
-                                address, chop);
-            String response = _on_message((char *) &(payload[7]));
-            char response_char[response.length() + 7];
-            memcpy(response_char, payload, sizeof(payload[0]) * 6);
-            response_char[6] = 2;
-            uint i = 0;
-            while (i < response.length()) {
-                response_char[7 + i] = response[i];
-                i++;
-            }
-            _webSocket.sendBinary(response_char, response.length() + 6);
-
-            // Send close
-            response_char[6] = 3;
-            _webSocket.sendBinary(response_char, 7);
-        }
+        auto msg = new OpenportMessage(payload, length);
+        _messages.push_back(msg);
+        DEBUG_SERIAL.print("Message in queue: ");
+        DEBUG_SERIAL.println(_messages.size());
     } else {
         DEBUG_SERIAL.printf("Got a short message: %d", length);
-    }}
+    }
+}
 
-void Openport::webSocketEvent(const websockets::WebsocketsEvent event, const String data) {
-    if(event == websockets::WebsocketsEvent::ConnectionOpened) {
+void OpenportClient::webSocketEvent(const websockets::WebsocketsEvent event, const String data) {
+    if (event == websockets::WebsocketsEvent::ConnectionOpened) {
         Serial.println("Connection Opened");
         requestWSPortForward();
-    } else if(event ==  websockets::WebsocketsEvent::ConnectionClosed) {
+    } else if (event == websockets::WebsocketsEvent::ConnectionClosed) {
         Serial.println("Connection Closed");
-    } else if(event ==  websockets::WebsocketsEvent::GotPing) {
+    } else if (event == websockets::WebsocketsEvent::GotPing) {
         Serial.println("Got a Ping!");
-    } else if(event ==  websockets::WebsocketsEvent::GotPong) {
+    } else if (event == websockets::WebsocketsEvent::GotPong) {
         Serial.println("Got a Pong!");
     }
 }
 
-void Openport::requestWSPortForward() {
+void OpenportClient::requestWSPortForward() {
     DynamicJsonDocument doc(2000);
     String jsonStr;
     doc["token"] = _session_token;
@@ -128,9 +119,10 @@ void Openport::requestWSPortForward() {
     _webSocket.send(jsonStr.c_str());
 }
 
-// TODO: keep track of connection status with ping/pong
+// TODO: Print a message when the client is connected
+// TODO: Stop connecting when a fatal error is returned from the server.
 
-bool Openport::sendHttpRequest(){
+bool OpenportClient::sendHttpRequest() {
 
     HTTPClient httpClient;
     char path[128];
@@ -144,7 +136,7 @@ bool Openport::sendHttpRequest(){
     sprintf(postData, "ws_token=%s", _key_token);
     Serial.println(postData);
     int responseCode = httpClient.POST(postData);
-    if (responseCode==200) {
+    if (responseCode == 200) {
         Serial.print("HTTP request successful");
         String payload = httpClient.getString();
         Serial.println(payload);
@@ -154,8 +146,7 @@ bool Openport::sendHttpRequest(){
         _server_port = doc["server_port"];
         _session_token = doc["session_token"].as<String>();
         _ws_host = doc["server_ip"].as<String>();
-    }
-    else {
+    } else {
         Serial.print("HTTP Response code: ");
         Serial.println(responseCode);
         String payload = httpClient.getString();
@@ -167,16 +158,16 @@ bool Openport::sendHttpRequest(){
     return true;
 }
 
-bool Openport::connectWS() {// Connect websocket
+bool OpenportClient::connectWS() {// Connect websocket
 #ifdef ESP8266
     _webSocket.setTrustAnchors(serverTrustedCA);
 #elif defined(ESP32)
     //    setCACert(ssl_ca_cert);
 #endif
     std::function<void(websockets::WebsocketsMessage)> onMessageCallback =
-            std::bind(&Openport::webSocketMessage, this, std::placeholders::_1);
+            std::bind(&OpenportClient::webSocketMessage, this, std::placeholders::_1);
     std::function<void(websockets::WebsocketsEvent, String)> onEventCallback =
-            std::bind(&Openport::webSocketEvent, this, std::placeholders::_1, std::placeholders::_2);
+            std::bind(&OpenportClient::webSocketEvent, this, std::placeholders::_1, std::placeholders::_2);
 
     _webSocket.onMessage(onMessageCallback);
     _webSocket.onEvent(onEventCallback);
@@ -193,14 +184,14 @@ bool Openport::connectWS() {// Connect websocket
         Serial.println("WS Connect failed");
         Serial.print("Close reason: ");
         Serial.println(_webSocket.getCloseReason());
-        if (!_webSocket.ping()){
+        if (!_webSocket.ping()) {
             Serial.println("WS Ping failed");
             return false;
         } else {
             Serial.println("WS Ping succeeded");
         }
     }
-    if (!_webSocket.ping()){
+    if (!_webSocket.ping()) {
         Serial.println("WS Ping failed");
         return false;
     } else {
@@ -210,11 +201,16 @@ bool Openport::connectWS() {// Connect websocket
 //    _webSocket.setReconnectInterval(5000);
 //    _webSocket.enableHeartbeat(15000, 3000, 2);
     Serial.print("Connecting attempted to ");
-    Serial.println(_host);
+    Serial.println(_ws_host);
+    Serial.print("http://");
+    Serial.print(_ws_host);
+    Serial.print(":");
+    Serial.println(_server_port);
+
     return true;
 }
 
-bool Openport::connect() {
+bool OpenportClient::connect() {
     if (!sendHttpRequest()) {
         return false;
     }
@@ -224,13 +220,38 @@ bool Openport::connect() {
 unsigned long messageInterval = 5000;
 
 
-void Openport::loop() {
+void OpenportClient::loop() {
+//    DEBUG_SERIAL.println("OpenportClient::loop");
     _webSocket.poll();
     if (_lastUpdate + messageInterval < millis()) {
         Serial.printf("is connected: %u\n", _webSocket.available());
         _lastUpdate = millis();
+        if (!_webSocket.available()) {
+            Serial.println("WS not connected");
+            connect();
+        }
     }
 }
+
+const char *OpenportClient::getRemoteHost() {
+    return _ws_host.c_str();
+}
+
+int OpenportClient::getRemotePort() {
+    return _server_port;
+}
+
+char *OpenportClient::getRemoteAddress() {
+    char *remoteAddress = (char *) malloc(128);
+    sprintf(remoteAddress, "%s:%d", _ws_host.c_str(), _server_port);
+    return remoteAddress;
+}
+
+std::deque<OpenportMessage*>* OpenportClient::getMessages() {
+    DEBUG_SERIAL.println("OpenportClient::getMessages");
+    return &_messages;
+}
+
 
 void setTimeUsingSNTP() {
     // Synchronize time using SNTP. This is necessary to verify that
@@ -249,3 +270,70 @@ void setTimeUsingSNTP() {
     Serial.print("Current time: ");
     Serial.print(asctime(&timeinfo));
 }
+
+
+OpenportMessage::OpenportMessage(const char *rawData, uint16_t length) {
+    DEBUG_SERIAL.println("Creating a message from raw data");
+    DEBUG_SERIAL.println("IP: " + String((int) rawData[0]) + "." + String((int)rawData[1]) + "." + String((int)rawData[2]) + "." + String((int)rawData[3]));
+    DEBUG_SERIAL.println("port: " + String((int)rawData[4]) + "<< 8 + " + String((int)rawData[5]) );
+    DEBUG_SERIAL.println("type: " + String((int)rawData[6]));
+
+    _rawData = rawData;
+    _clientIp = IPAddress(rawData[0], rawData[1], rawData[2], rawData[3]);
+    _clientPort = rawData[4] << 8 | rawData[5];
+    _type = rawData[6];
+    _payload = rawData + 7;
+    _payloadSize = length - 7;
+    DEBUG_SERIAL.println("_payloadSize: " + String((int)_payloadSize));
+
+}
+
+OpenportMessage::OpenportMessage(const char *payload, uint16_t payloadLength, uint8_t type, IPAddress clientIp, uint16_t clientPort) {
+    _payload = payload;
+    _payloadSize = payloadLength;
+    _type = type;
+    _clientIp = clientIp;
+    _clientPort = clientPort;
+}
+
+std::unique_ptr<char> OpenportMessage::getRawData() {
+    auto responseChar = new char[_payloadSize + 7];
+    responseChar[0] = _clientIp[0];
+    responseChar[1] = _clientIp[1];
+    responseChar[2] = _clientIp[2];
+    responseChar[3] = _clientIp[3];
+    responseChar[4] = _clientPort >> 8;
+    responseChar[5] = _clientPort & 0xFF;
+    responseChar[6] = _type;
+    uint i = 0;
+    while (i < _payloadSize) {
+        responseChar[7 + i] = _payload[i];
+        i++;
+    }
+    return std::unique_ptr<char>(responseChar);
+}
+
+const char *OpenportMessage::getPayload() {
+    return _payload;
+}
+
+int OpenportMessage::getRawDataLength() {
+    return _payloadSize + 7;
+}
+
+int OpenportMessage::getType() {
+    return _type;
+}
+
+IPAddress OpenportMessage::getClientIp() {
+    return _clientIp;
+}
+
+uint16_t OpenportMessage::getClientPort() {
+    return _clientPort;
+}
+
+uint16_t OpenportMessage::getPayloadSize() {
+    return _payloadSize;
+}
+
