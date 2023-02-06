@@ -5,7 +5,7 @@
 #include "../lib/Openport/src/OpenportWiFiServer.h"
 #include "../lib/Openport/src/OpenportEsp8266TCPServer.h"
 #include "../.pio/libdeps/Debug/ArduinoWebsockets/src/tiny_websockets/network/tcp_server.hpp"
-
+#include <typeinfo>
 const char *ssid = "";
 const char *password = "";
 
@@ -58,28 +58,39 @@ return response;
 
 void webserverLoop(WiFiServer *server ) {
     // listen for incoming clients
-    OpenportWiFiClient client = (dynamic_cast<OpenportWiFiServer*>(server))->available2();
-//    if (dynamic_cast<OpenportWiFiServer*>(server) != nullptr){
-//        client = (dynamic_cast<OpenportWiFiServer*>(server))->available();
-//    } else {
-//        client = server->available();
-//    }
-//    DEBUG_SERIAL.println("got client?");
+    WiFiClient* client = nullptr;
+    // Needs to be initialized here, because otherwise the type information is lost.
+    WiFiClient tmpClient;
+    OpenportWiFiClient tmpClient2 = OpenportWiFiClient(nullptr, nullptr);
+
+    if (dynamic_cast<OpenportWiFiServer*>(server) != nullptr){
+        tmpClient2 = (dynamic_cast<OpenportWiFiServer *>(server))->available();
+        if (tmpClient2){
+            client = &tmpClient2;
+        }
+    } else {
+        tmpClient = server->available();
+        if (tmpClient){
+            client = &tmpClient;
+        }
+    }
+
     delay(100);
-    if (client) {
+    if (client != nullptr){
         Serial.println("new client");
+        Serial.println(typeid(*client).name());
         // a http request ends with a blank line
-        if (client.connected()) {
+        if (client->connected()) {
             Serial.println("client is connected");
             uint8_t  readBuffer[1024];
-            while (!client.available()) {
+            while (!client->available()) {
                 delay(1);
             }
             Serial.println("client is available");
             int i = 0;
             // todo: this is not right, we should be reading until the end of the request
-            while (i < 1024 && client.available()) {
-                i = client.read(readBuffer, 1024);
+            while (i < 1024 && client->available()) {
+                i = client->read(readBuffer, 1024);
             }
             Serial.println("client read");
             Serial.println(reinterpret_cast<const char *>(readBuffer));
@@ -90,9 +101,8 @@ void webserverLoop(WiFiServer *server ) {
             Serial.println(response);
             char* response2 = (char*) malloc(response.length() + 1);
             response.toCharArray(response2, response.length() + 1);
-//            client.print(response);
             const uint8_t *buf = reinterpret_cast<const uint8_t *>(response2);
-            client.write(buf, response.length());
+            client->write(buf, response.length());
             free(response2);
         } else {
             Serial.println("client is not connected?");
@@ -100,8 +110,7 @@ void webserverLoop(WiFiServer *server ) {
         // give the web browser time to receive the data
         delay(1);
         // close the connection:
-        client.stop(0);
-        Serial.println("client disconnected");
+        client->stop();
     } else{
 //        DEBUG_SERIAL.println("no client for you");
     }
@@ -158,7 +167,7 @@ void wsServerLoop() {
 void loop() {
     openport_http.loop();
 //    openport_ws.loop();
-//    webserverLoop(&server);
+    webserverLoop(&server);
     webserverLoop(&openport_http_server);
 //    DEBUG_SERIAL.println("looping");
 //    wsServerLoop();

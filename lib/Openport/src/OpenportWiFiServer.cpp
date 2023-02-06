@@ -19,8 +19,8 @@ int OpenportWiFiServer::_findClient(IPAddress clientIp, uint16_t clientPort) {
     return -1;
 }
 
-OpenportWiFiClient OpenportWiFiServer::available2(uint8_t *status) {
-//    DEBUG_SERIAL.println("OpenportWiFiServer::available");
+OpenportWiFiClient OpenportWiFiServer::available(uint8_t *status) {
+    DEBUG_SERIAL.println("OpenportWiFiServer::available");
     _openport->loop();
 //    DEBUG_SERIAL.println("out of _openport->loop    ");
 
@@ -48,7 +48,7 @@ OpenportWiFiClient OpenportWiFiServer::available2(uint8_t *status) {
             auto oldClientIndex = _findClient(message->getClientIp(), message->getClientPort());
             if (oldClientIndex >=0) {
                 auto oldClient = _clients[oldClientIndex];
-                oldClient->stop(0);
+                oldClient->stop();
                 _clients.erase(_clients.begin() + oldClientIndex);
                 delete oldClient;
             }
@@ -65,33 +65,13 @@ OpenportWiFiClient OpenportWiFiServer::available2(uint8_t *status) {
         DEBUG_SERIAL.println("returning client");
         return *client;
     }
-//    DEBUG_SERIAL.println("creating client");
-
     auto client = OpenportWiFiClient(nullptr, nullptr);
-//    DEBUG_SERIAL.println("out while loop 2");
     return client;
 }
-
-//void OpenportWiFiServer::stop() {
-//    // Not implemented
-//}
 
 bool OpenportWiFiServer::hasClient() {
     return !_new_clients.empty();
 }
-//
-//void OpenportWiFiServer::begin(uint16_t port, uint8_t backlog) {
-//    // Not implemented
-//}
-
-//void OpenportWiFiServer::setNoDelay(bool nodelay) {
-//    // Not implemented
-//}
-//
-//bool OpenportWiFiServer::getNoDelay() {
-//    // Not implemented
-//    return false;
-//}
 
 size_t OpenportWiFiServer::write(uint8_t b) {
     // Not implemented
@@ -117,27 +97,6 @@ void OpenportWiFiServer::close() {
     // Not implemented
 }
 
-//uint8_t OpenportWiFiClient::status() {
-//    return WiFiClient::status();
-//}
-//
-//int OpenportWiFiClient::connect(IPAddress ip, uint16_t port) {
-//    return WiFiClient::connect(ip, port);
-//}
-//
-//int OpenportWiFiClient::connect(const char *host, uint16_t port) {
-//    return WiFiClient::connect(host, port);
-//}
-//
-//int OpenportWiFiClient::connect(const String &host, uint16_t port) {
-//    return WiFiClient::connect(host, port);
-//}
-
-//size_t OpenportWiFiClient::write(uint8_t msg) {
-//
-//    return WiFiClient::write(msg);
-//}
-
 size_t OpenportWiFiClient::write(const uint8_t *buf, size_t size) {
     DEBUG_SERIAL.println("OpenportWiFiClient::write");
 
@@ -148,26 +107,6 @@ size_t OpenportWiFiClient::write(const uint8_t *buf, size_t size) {
     _openportClient->send(&openportMsg);
     return size;
 }
-
-//size_t OpenportWiFiClient::write_P(const char *buf, size_t size) {
-//    return WiFiClient::write_P(buf, size);
-//}
-
-//size_t OpenportWiFiClient::write(Stream &stream) {
-//    return WiFiClient::write(stream);
-//}
-//
-//size_t OpenportWiFiClient::write(Stream &stream, size_t unitSize) {
-//    return WiFiClient::write(stream, unitSize);
-//}
-//
-//int OpenportWiFiClient::available() {
-//    return WiFiClient::available();
-//}
-//
-//int OpenportWiFiClient::read() {
-//    return WiFiClient::read();
-//}
 
 int OpenportWiFiClient::read(uint8_t *buf, size_t size) {
     OpenportMessage* msg = _messages.front();
@@ -193,52 +132,19 @@ int OpenportWiFiClient::read(uint8_t *buf, size_t size) {
     }
     return end;
 }
-//
-//int OpenportWiFiClient::peek() {
-//    return WiFiClient::peek();
-//}
 
-
-bool OpenportWiFiClient::stop(unsigned int maxWaitMs) {
+void OpenportWiFiClient::stop() {
+    DEBUG_SERIAL.println("OpenportWiFiClient::stop");
     OpenportMessage msg = OpenportMessage("", 0, ChOpClose, _remoteIP, _remotePort);
     _openportClient->send(&msg);
-    return true;
+    // todo: remove from lists?
+    // _openportWiFiServer->removeClient(this);
 }
-//
-//uint8_t OpenportWiFiClient::connected() {
-//    return WiFiClient::connected();
-//}
 
-
-
-
-//
-//void OpenportWiFiClient::stopAll() {
-//
-//}
-//
-//void OpenportWiFiClient::stopAllExcept(WiFiClient *c) {
-//
-//}
-//
-//bool OpenportWiFiClient::getDefaultNoDelay() {
-//    return false;
-//}
-//
-//
-//void OpenportWiFiClient::setDefaultSync(bool sync) {
-//
-//}
-//
-//bool OpenportWiFiClient::getDefaultSync() {
-//    return false;
-//}
-//
-//
 OpenportWiFiClient::operator bool() {
+    DEBUG_SERIAL.println("OpenportWiFiClient::operator bool()");
     return _openportClient != nullptr;
 }
-
 
 void OpenportWiFiClient::addMessage(OpenportMessage *msg) {
     _messages.push_back(msg);
@@ -256,6 +162,7 @@ OpenportWiFiClient::OpenportWiFiClient(OpenportClient* openportClient, OpenportM
 }
 
 uint8_t OpenportWiFiClient::connected() {
+    DEBUG_SERIAL.println("OpenportWiFiClient::connected()");
     return true; // todo: finetune
 }
 

@@ -50,7 +50,7 @@ public:
 
 //    bool flush(unsigned int maxWaitMs);
 
-    bool stop(unsigned int maxWaitMs);
+    void stop() override;
 //
     uint8_t connected() override;
 //
@@ -132,7 +132,7 @@ class OpenportWiFiServer : public WiFiServer {
 public:
     OpenportWiFiServer(OpenportClient *openport);
 
-    OpenportWiFiClient available2(uint8_t *status = NULL);
+    OpenportWiFiClient available(uint8_t *status = NULL);
 
     bool hasClient();
 
