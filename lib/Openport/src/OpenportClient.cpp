@@ -4,8 +4,10 @@
 
 #include "OpenportClient.h"
 //#include <ArduinoJson.h>
-#include "../../../.pio/libdeps/Debug/ArduinoJson/ArduinoJson.h"
-
+#include <ArduinoJson.h>
+#include "tiny_websockets/network/esp8266/esp8266_tcp.hpp"
+#include "tiny_websockets/network/generic_esp/generic_esp_clients.hpp"
+#include "tiny_websockets/network/tcp_client.hpp"
 
 #include <memory>
 #include <functional>
@@ -53,13 +55,18 @@ const char ssl_ca_cert[] PROGMEM = \
 
 X509List *serverTrustedCA = new X509List(ssl_ca_cert);
 
-WiFiClientSecure wifiClient;
 
 OpenportClient::OpenportClient(char *host, char *key_token) {
     _host = host;
     _key_token = key_token;
-    _messages = std::deque< OpenportMessage* >();
-    wifiClient.setTrustAnchors(serverTrustedCA);
+//    _messages = std::deque< OpenportMessage* >();
+    _wifiClient.setTrustAnchors(serverTrustedCA);
+    _wifiClient.setBufferSizes(512, 512);
+
+    DEBUG_SERIAL.printf("&_wifiClient: %p", &_wifiClient);
+    auto* genericTcpClient = new websockets::network::SecuredEsp8266TcpClient(_wifiClient);
+    auto sharedPtr = std::shared_ptr<websockets::network::TcpClient>(genericTcpClient);
+    _webSocket = websockets::WebsocketsClient(sharedPtr);
 }
 
 void addrFromPayload(char *address, const char *payload) {
@@ -88,7 +95,7 @@ void OpenportClient::webSocketMessage(const websockets::WebsocketsMessage messag
     if (length > 6) {
         auto msg = new OpenportMessage(payload, length);
         _messages.push_back(msg);
-        DEBUG_SERIAL.print("Message in queue: ");
+        DEBUG_SERIAL.print("Messages in queue: ");
         DEBUG_SERIAL.println(_messages.size());
     } else {
         DEBUG_SERIAL.printf("Got a short message: %d", length);
@@ -123,6 +130,7 @@ void OpenportClient::requestWSPortForward() {
 // TODO: Stop connecting when a fatal error is returned from the server.
 
 bool OpenportClient::sendHttpRequest() {
+    Serial.printf("Free Memory at OpenportClient::sendHttpRequest: %d\n", ESP.getFreeHeap());
 
     HTTPClient httpClient;
     char path[128];
@@ -130,7 +138,7 @@ bool OpenportClient::sendHttpRequest() {
     Serial.print("post to  ");
     Serial.println(path);
 
-    httpClient.begin(wifiClient, String(path));
+    httpClient.begin(_wifiClient, String(path));
     httpClient.addHeader("Content-Type", "application/x-www-form-urlencoded");
     char postData[128];
     sprintf(postData, "ws_token=%s", _key_token);
@@ -159,6 +167,9 @@ bool OpenportClient::sendHttpRequest() {
 }
 
 bool OpenportClient::connectWS() {// Connect websocket
+    Serial.printf("Free Memory at OpenportClient::connectWS: %d\n", ESP.getFreeHeap());
+    _wifiClient.setBufferSizes(512, 512);
+
 #ifdef ESP8266
     _webSocket.setTrustAnchors(serverTrustedCA);
 #elif defined(ESP32)
@@ -176,10 +187,12 @@ bool OpenportClient::connectWS() {// Connect websocket
     sprintf(fullPath, "wss://%s:443/ws", _ws_host.c_str());
     Serial.print("WS Connecting to ");
     Serial.println(fullPath);
+    Serial.printf("Free Memory at OpenportClient::connectWS 1: %d\n", ESP.getFreeHeap());
 
     // todo: set insecure after certificate expiration date
-//    _webSocket.setInsecure();
+//    _webSocket.setInsecure();1
     bool connected = _webSocket.connect(fullPath);
+    Serial.printf("Free Memory at OpenportClient::connectWS 2: %d\n", ESP.getFreeHeap());
     if (!connected) {
         Serial.println("WS Connect failed");
         Serial.print("Close reason: ");
@@ -191,12 +204,14 @@ bool OpenportClient::connectWS() {// Connect websocket
             Serial.println("WS Ping succeeded");
         }
     }
+    Serial.printf("Free Memory at OpenportClient::connectWS 3: %d\n", ESP.getFreeHeap());
     if (!_webSocket.ping()) {
         Serial.println("WS Ping failed");
         return false;
     } else {
         Serial.println("WS Ping succeeded");
     }
+    Serial.printf("Free Memory at OpenportClient::connectWS 4: %d\n", ESP.getFreeHeap());
 
 //    _webSocket.setReconnectInterval(5000);
 //    _webSocket.enableHeartbeat(15000, 3000, 2);
@@ -211,6 +226,11 @@ bool OpenportClient::connectWS() {// Connect websocket
 }
 
 bool OpenportClient::connect() {
+    Serial.printf("Free Memory at OpenportClient::connect: %d\n", ESP.getFreeHeap());
+
+//     Free the memory previously used.
+//    _webSocket.disconnect();
+
     if (!sendHttpRequest()) {
         return false;
     }
@@ -241,14 +261,14 @@ int OpenportClient::getRemotePort() {
     return _server_port;
 }
 
-char *OpenportClient::getRemoteAddress() {
-    char *remoteAddress = (char *) malloc(128);
+std::unique_ptr<char> OpenportClient::getRemoteAddress() {
+    char *remoteAddress = new char[128];
     sprintf(remoteAddress, "%s:%d", _ws_host.c_str(), _server_port);
-    return remoteAddress;
+    return std::unique_ptr<char>( remoteAddress);
 }
 
 std::deque<OpenportMessage*>* OpenportClient::getMessages() {
-    DEBUG_SERIAL.println("OpenportClient::getMessages");
+    DEBUG_SERIAL.printf("%p OpenportClient::getMessages (%d)\n", this, _messages.size());
     return &_messages;
 }
 
@@ -257,7 +277,7 @@ void setTimeUsingSNTP() {
     // Synchronize time using SNTP. This is necessary to verify that
     // the TLS certificates offered by the server are currently valid.
     Serial.print("Setting time using SNTP");
-    configTime(8 * 3600, 0, "pool.ntp.org", "time.nist.gov");
+    configTime(1 * 3600, 0, "pool.ntp.org", "time.nist.gov");
     time_t now = time(nullptr);
     while (now < 8 * 3600 * 2) {
         delay(500);

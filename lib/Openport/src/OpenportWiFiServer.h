@@ -146,9 +146,9 @@ public:
 //
 //    bool getNoDelay();
 
-    size_t write(uint8_t b);
+//    size_t write(uint8_t b) override;
 
-    virtual size_t write(const uint8_t *buf, size_t size);
+//    virtual size_t write(const uint8_t *buf, size_t size);
 
     uint8_t status();
 
@@ -157,13 +157,13 @@ public:
     void close();
 
     void stop();
-    using ClientType = OpenportWiFiClient;
 
 private:
     OpenportClient *_openport;
     std::deque<OpenportWiFiClient*> _clients;
     std::deque<OpenportWiFiClient*> _new_clients;
     int _findClient(IPAddress clientIp, uint16_t clientPort);
+    void _processMessages();
 };
 
 

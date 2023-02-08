@@ -1,11 +1,11 @@
 #include <Arduino.h>
 #include <ESP8266WiFi.h>
-#include "../lib/Openport/src/OpenportClient.h"
-#include "../.pio/libdeps/Debug/ArduinoWebsockets/src/tiny_websockets/server.hpp"
-#include "../lib/Openport/src/OpenportWiFiServer.h"
-#include "../lib/Openport/src/OpenportEsp8266TCPServer.h"
-#include "../.pio/libdeps/Debug/ArduinoWebsockets/src/tiny_websockets/network/tcp_server.hpp"
+#include "OpenportClient.h"
+#include "OpenportWiFiServer.h"
+#include "OpenportEsp8266TCPServer.h"
 #include <typeinfo>
+#include <ArduinoWebsockets.h>
+
 const char *ssid = "";
 const char *password = "";
 
@@ -19,15 +19,16 @@ OpenportWiFiServer openport_http_server = OpenportWiFiServer(&openport_http);
 OpenportWiFiServer openport_ws_server = OpenportWiFiServer(&openport_ws);
 
 OpenportEsp8266TCPServer openportEsp8266TcpServer = OpenportEsp8266TCPServer(openport_ws_server);
-websockets::WebsocketsServer ws_server = websockets::WebsocketsServer(&openportEsp8266TcpServer);
+websockets::network::TcpServer* tcpServer = &openportEsp8266TcpServer;
+websockets::WebsocketsServer ws_server = websockets::WebsocketsServer(tcpServer);
 
 String getHTTPResponse(uint8_t* request) {
-    String ws_host = String(openport_ws.getRemoteHost());
-    ws_host = "notset";
+    String ws_host = String(openport_ws.getRemoteHost()) + ":" + String(openport_ws.getRemotePort());
+//    ws_host = "notset";
     String response = "HTTP/1.1 200 OK";
     response += "\nContent-Type: text/html";
-//    response += "\nConnection: close";  // the connection will be closed after completion of the response
-//    response += "\nRefresh: 5";  // refresh the page automatically every 5 sec
+    response += "\nConnection: close";  // the connection will be closed after completion of the response
+    response += "\nRefresh: 30";  // refresh the page automatically every 5 sec
     response += "\n";
     response += "\n<!DOCTYPE HTML>\n" \
 "<html lang=\"en\">\n" \
@@ -117,15 +118,19 @@ void webserverLoop(WiFiServer *server ) {
 }
 
 void setup() {
+
     DEBUG_SERIAL.begin(115200);
     DEBUG_SERIAL.setDebugOutput(true);
     DEBUG_SERIAL.println();
+    Serial.printf("Free Memory: %d\n", ESP.getFreeHeap());
 
     for (uint8_t t = 4; t > 0; t--) {
         DEBUG_SERIAL.printf("[SETUP] BOOT WAIT %d...\n", t);
         DEBUG_SERIAL.flush();
         delay(1000);
     }
+    Serial.printf("Free Memory at BOOT: %d\n", ESP.getFreeHeap());
+
     WiFi.begin(ssid, password);
     while (WiFi.status() != WL_CONNECTED) {
         delay(500);
@@ -133,23 +138,36 @@ void setup() {
     }
     DEBUG_SERIAL.println("My IP:");
     DEBUG_SERIAL.println(WiFi.localIP());
+    Serial.printf("Free Memory after wifi connect: %d\n", ESP.getFreeHeap());
 
     setTimeUsingSNTP();
+    Serial.printf("Free Memory after SNTP: %d\n", ESP.getFreeHeap());
     while (!openport_http.connect()){
         DEBUG_SERIAL.println("Failed to connect to OpenportClient (HTTP)");
         delay(1000);
     }
-//    while (!openport_ws.connect()){
-//        DEBUG_SERIAL.println("Failed to connect to OpenportClient (WS)");
-//        delay(1000);
-//    }
+    Serial.printf("Free Memory after openport connect: %d\n", ESP.getFreeHeap());
+
+    while (!openport_ws.connect()){
+        DEBUG_SERIAL.println("Failed to connect to OpenportClient (WS)");
+        delay(1000);
+    }
     server.begin();
-//    ws_server.listen(81);
+    ws_server.listen(81);
+    Serial.printf("Free Memory at the end of init: %d\n", ESP.getFreeHeap());
 }
 
 void wsServerLoop() {
+    Serial.print("ws_server.poll()... ");
+    if (!ws_server.poll()) {
+        return;
+    }
     websockets::WebsocketsClient client = ws_server.accept();
+    Serial.print("client.available()...\n ");
+
     if(client.available()) {
+        Serial.print("Got a ws client: ");
+
         websockets::WebsocketsMessage msg = client.readBlocking();
 
         // log
@@ -166,10 +184,11 @@ void wsServerLoop() {
 
 void loop() {
     openport_http.loop();
-//    openport_ws.loop();
+    openport_ws.loop();
     webserverLoop(&server);
     webserverLoop(&openport_http_server);
 //    DEBUG_SERIAL.println("looping");
-//    wsServerLoop();
+    wsServerLoop();
     delay(1000);
+    Serial.printf("Free Memory: %d\n", ESP.getFreeHeap());
 }

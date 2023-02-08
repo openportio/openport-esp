@@ -18,6 +18,10 @@ if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/CMakeListsUser.txt)
 include(CMakeListsUser.txt)
 endif()
 
+INCLUDE_DIRECTORIES(lib/Openport/src)
+INCLUDE_DIRECTORIES(ArduinoWebsockets/src)
+INCLUDE_DIRECTORIES(.pio/libdeps/Debug/ArduinoJson/src)
+
 add_custom_target(
     Production ALL
     COMMAND platformio -c clion run "$<$<NOT:$<CONFIG:All>>:-e${CMAKE_BUILD_TYPE}>"

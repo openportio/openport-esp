@@ -5,15 +5,13 @@
 #ifndef ARDUINO_WEBSOCKETS_OPENPORTCLIENT_H
 #define ARDUINO_WEBSOCKETS_OPENPORTCLIENT_H
 
-//#include <ArduinoWebsockets.h>
 #include <WiFiClientSecure.h>
 #include <ESP8266HTTPClient.h>
 
 #include <ArduinoJson.h>
 #include <deque>
-#include "../../../.pio/libdeps/Debug/ArduinoWebsockets/src/tiny_websockets/client.hpp"
-#include "../../../.pio/libdeps/Debug/ArduinoWebsockets/src/tiny_websockets/message.hpp"
-#include "../../../.pio/libdeps/Debug/ArduinoJson/ArduinoJson.h"
+
+#include <ArduinoWebsockets.h>
 
 #define DEBUG_SERIAL Serial
 
@@ -64,7 +62,7 @@ public:
     int getRemotePort();
     void send(OpenportMessage *msg);
 
-    char *getRemoteAddress();
+    std::unique_ptr<char> getRemoteAddress();
     std::deque<OpenportMessage*>* getMessages();
 
 private:
@@ -76,6 +74,8 @@ private:
     unsigned long _lastUpdate = millis();
     websockets::WebsocketsClient _webSocket;
     std::deque< OpenportMessage* > _messages;
+    WiFiClientSecure _wifiClient;
+
     void webSocketEvent(websockets::WebsocketsEvent event, String data);
 
     void webSocketMessage(websockets::WebsocketsMessage message);

@@ -1,4 +1,4 @@
-#include "../../../.pio/libdeps/Debug/ArduinoWebsockets/src/tiny_websockets/network/esp8266/esp8266_tcp.hpp"
+#include <ArduinoWebsockets.h>
 #include "OpenportWiFiServer.h"
 
 class OpenportEsp8266TCPServer : public websockets::network::Esp8266TcpServer {

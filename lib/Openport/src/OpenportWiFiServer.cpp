@@ -10,7 +10,7 @@ OpenportWiFiServer::OpenportWiFiServer(OpenportClient *openport) : WiFiServer(0)
 }
 
 int OpenportWiFiServer::_findClient(IPAddress clientIp, uint16_t clientPort) {
-    for (int i = 0; i < _clients.size(); i++) {
+    for (uint i = 0; i < _clients.size(); i++) {
         auto client = _clients[i];
         if (client->remoteIP() == clientIp && client->remotePort() == clientPort) {
             return i;
@@ -24,6 +24,19 @@ OpenportWiFiClient OpenportWiFiServer::available(uint8_t *status) {
     _openport->loop();
 //    DEBUG_SERIAL.println("out of _openport->loop    ");
 
+    _processMessages();
+
+    if (! _new_clients.empty()) {
+        auto client = _new_clients.front();
+        _new_clients.pop_front();
+        DEBUG_SERIAL.println("returning client");
+        return *client;
+    }
+    auto client = OpenportWiFiClient(nullptr, nullptr);
+    return client;
+}
+
+void OpenportWiFiServer::_processMessages() {
     OpenportMessage* message;
     std::deque<OpenportMessage *>* messages = _openport->getMessages();
     while(!messages->empty()) {
@@ -58,18 +71,11 @@ OpenportWiFiClient OpenportWiFiServer::available(uint8_t *status) {
         }
     }
     DEBUG_SERIAL.println("out while loop ");
-
-    if (! _new_clients.empty()) {
-        auto client = _new_clients.front();
-        _new_clients.pop_front();
-        DEBUG_SERIAL.println("returning client");
-        return *client;
-    }
-    auto client = OpenportWiFiClient(nullptr, nullptr);
-    return client;
 }
 
 bool OpenportWiFiServer::hasClient() {
+    _processMessages();
+    DEBUG_SERIAL.printf("OpenportWiFiServer::hasClient: %d", _new_clients.size());
     return !_new_clients.empty();
 }
 
@@ -116,7 +122,7 @@ int OpenportWiFiClient::read(uint8_t *buf, size_t size) {
     size_t bytesLeftToRead = msg->getPayloadSize() - _currentPosition;
     DEBUG_SERIAL.printf("bytesLeftToRead: %d \n", bytesLeftToRead);
     auto end = min(bytesLeftToRead, size);
-    for (int i = 0; i < end; i++) {
+    for (uint i = 0; i < end; i++) {
         buf[i] = msg->getPayload()[i + _currentPosition];
     }
     if (bytesLeftToRead > size){  // still more to read
@@ -142,7 +148,6 @@ void OpenportWiFiClient::stop() {
 }
 
 OpenportWiFiClient::operator bool() {
-    DEBUG_SERIAL.println("OpenportWiFiClient::operator bool()");
     return _openportClient != nullptr;
 }
 
