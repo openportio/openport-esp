@@ -10,17 +10,13 @@ set(CMAKE_SYSTEM_NAME Generic)
 set(CMAKE_C_COMPILER_WORKS 1)
 set(CMAKE_CXX_COMPILER_WORKS 1)
 
-project("Arduino websockets" C CXX)
+project("arduino-websockets" C CXX)
 
 include(CMakeListsPrivate.txt)
 
 if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/CMakeListsUser.txt)
 include(CMakeListsUser.txt)
 endif()
-
-INCLUDE_DIRECTORIES(lib/Openport/src)
-INCLUDE_DIRECTORIES(ArduinoWebsockets/src)
-INCLUDE_DIRECTORIES(.pio/libdeps/Debug/ArduinoJson/src)
 
 add_custom_target(
     Production ALL
@@ -34,4 +30,4 @@ add_custom_target(
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
-add_executable(Z_DUMMY_TARGET ${SRC_LIST} lib/Openport/src/OpenportClient.cpp lib/Openport/src/OpenportClient.h)
+add_executable(Z_DUMMY_TARGET ${SRC_LIST})

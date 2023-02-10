@@ -53,20 +53,34 @@ const char ssl_ca_cert[] PROGMEM = \
 "jjxDah2nGN59PRbxYvnKkKj9\n" \
 "-----END CERTIFICATE-----\n";
 
+#ifdef ESP8266
+
 X509List *serverTrustedCA = new X509List(ssl_ca_cert);
+#endif
 
 
 OpenportClient::OpenportClient(char *host, char *key_token) {
     _host = host;
     _key_token = key_token;
 //    _messages = std::deque< OpenportMessage* >();
-    _wifiClient.setTrustAnchors(serverTrustedCA);
-    _wifiClient.setBufferSizes(512, 512);
 
     DEBUG_SERIAL.printf("&_wifiClient: %p", &_wifiClient);
-    auto* genericTcpClient = new websockets::network::SecuredEsp8266TcpClient(_wifiClient);
-    auto sharedPtr = std::shared_ptr<websockets::network::TcpClient>(genericTcpClient);
-    _webSocket = websockets::WebsocketsClient(sharedPtr);
+//#ifdef ESP8266
+//    _wifiClient.setTrustAnchors(serverTrustedCA);
+//    _wifiClient.setBufferSizes(512, 512);
+//
+//
+//    auto *genericTcpClient = new websockets::network::SecuredEsp8266TcpClient(_wifiClient);
+//#elif defined(ESP32)
+//
+//    char *tmpCrt = new char[strlen(ssl_ca_cert) + 1];
+//    memcpy(tmpCrt, ssl_ca_cert, strlen(ssl_ca_cert) + 1);
+//    _wifiClient.setCACert(tmpCrt);
+//    auto* genericTcpClient = new websockets::network::SecuredEsp32TcpClient(_wifiClient);
+//#endif
+//
+//    auto sharedPtr = std::shared_ptr<websockets::network::TcpClient>(genericTcpClient);
+//    _webSocket = websockets::WebsocketsClient(sharedPtr);
 }
 
 void addrFromPayload(char *address, const char *payload) {
@@ -77,10 +91,9 @@ void addrFromPayload(char *address, const char *payload) {
 void OpenportClient::send(OpenportMessage *msg) {
     DEBUG_SERIAL.println("OpenportClient::Sending message: ");
     DEBUG_SERIAL.println(msg->getPayload());
-    DEBUG_SERIAL.println("OpenportClient::Raw message: ");
-    const std::unique_ptr<char> rawDataPtr = msg->getRawData();
-    char *rawData = rawDataPtr.get();
-    DEBUG_SERIAL.println(rawData);
+//    DEBUG_SERIAL.println("OpenportClient::Raw message: ");
+    char* rawData = msg->getRawData();
+//    DEBUG_SERIAL.println(rawData);
     _webSocket.sendBinary(rawData, msg->getRawDataLength());
 }
 
@@ -88,12 +101,12 @@ void OpenportClient::webSocketMessage(const websockets::WebsocketsMessage messag
     Serial.print("Got Message: ");
     Serial.println(message.data());
 
-    int length = message.length();
-    const char *payload = message.c_str();
+    uint length = message.length();
+    const char *data = message.c_str();
 
     DEBUG_SERIAL.printf("get binary length: %u\n", length);
     if (length > 6) {
-        auto msg = new OpenportMessage(payload, length);
+        auto msg = new OpenportMessage(const_cast<char*>(data), length);
         _messages.push_back(msg);
         DEBUG_SERIAL.print("Messages in queue: ");
         DEBUG_SERIAL.println(_messages.size());
@@ -112,6 +125,8 @@ void OpenportClient::webSocketEvent(const websockets::WebsocketsEvent event, con
         Serial.println("Got a Ping!");
     } else if (event == websockets::WebsocketsEvent::GotPong) {
         Serial.println("Got a Pong!");
+    } else {
+        Serial.printf("Got an unknown event: %d \n", event);
     }
 }
 
@@ -137,12 +152,31 @@ bool OpenportClient::sendHttpRequest() {
     sprintf(path, "https://%s/api/v1/request-port", _host);
     Serial.print("post to  ");
     Serial.println(path);
+//    Serial.print("deleting _wificlient  ");
+//
+////    delete &_wifiClient;
+//    Serial.print("recreating _wificlient  ");
 
-    httpClient.begin(_wifiClient, String(path));
+//    _wifiClient = WiFiClientSecure();
+////    _wifiClient.setCACert(ssl_ca_cert);
+//    char *tmpCrt = new char[strlen(ssl_ca_cert) + 1];
+//     memcpy(tmpCrt, ssl_ca_cert, strlen(ssl_ca_cert) + 1);
+//
+//    _wifiClient.setCACert(tmpCrt);
+//    httpClient.begin(_wifiClient, String(path));
+
+    WiFiClientSecure tmpClient = WiFiClientSecure();
+        char *tmpCrt = new char[strlen(ssl_ca_cert) + 1];
+     memcpy(tmpCrt, ssl_ca_cert, strlen(ssl_ca_cert) + 1);
+
+    tmpClient.setCACert(tmpCrt);
+    httpClient.begin(tmpClient, String(path));
+
     httpClient.addHeader("Content-Type", "application/x-www-form-urlencoded");
     char postData[128];
     sprintf(postData, "ws_token=%s", _key_token);
     Serial.println(postData);
+
     int responseCode = httpClient.POST(postData);
     if (responseCode == 200) {
         Serial.print("HTTP request successful");
@@ -168,13 +202,28 @@ bool OpenportClient::sendHttpRequest() {
 
 bool OpenportClient::connectWS() {// Connect websocket
     Serial.printf("Free Memory at OpenportClient::connectWS: %d\n", ESP.getFreeHeap());
-    _wifiClient.setBufferSizes(512, 512);
 
 #ifdef ESP8266
+    _wifiClient.setBufferSizes(512, 512);
     _webSocket.setTrustAnchors(serverTrustedCA);
 #elif defined(ESP32)
     //    setCACert(ssl_ca_cert);
 #endif
+
+
+
+
+//    WiFiClientSecure tmpClient = WiFiClientSecure();
+    char *tmpCrt = new char[strlen(ssl_ca_cert) + 1];
+    memcpy(tmpCrt, ssl_ca_cert, strlen(ssl_ca_cert) + 1);
+//
+//    tmpClient.setCACert(tmpCrt);
+
+//    auto* genericTcpClient = new websockets::network::SecuredEsp32TcpClient(tmpClient);
+//    auto sharedPtr = std::shared_ptr<websockets::network::TcpClient>(genericTcpClient);
+//    _webSocket = websockets::WebsocketsClient();
+    _webSocket.setCACert(tmpCrt);
+
     std::function<void(websockets::WebsocketsMessage)> onMessageCallback =
             std::bind(&OpenportClient::webSocketMessage, this, std::placeholders::_1);
     std::function<void(websockets::WebsocketsEvent, String)> onEventCallback =
@@ -234,6 +283,13 @@ bool OpenportClient::connect() {
     if (!sendHttpRequest()) {
         return false;
     }
+
+//    if (!sendHttpRequest()) {
+//        return false;
+//    }
+//
+//    delay(1000000);
+
     return connectWS();
 }
 
@@ -264,11 +320,11 @@ int OpenportClient::getRemotePort() {
 std::unique_ptr<char> OpenportClient::getRemoteAddress() {
     char *remoteAddress = new char[128];
     sprintf(remoteAddress, "%s:%d", _ws_host.c_str(), _server_port);
-    return std::unique_ptr<char>( remoteAddress);
+    return std::unique_ptr<char>(remoteAddress);
 }
 
-std::deque<OpenportMessage*>* OpenportClient::getMessages() {
-    DEBUG_SERIAL.printf("%p OpenportClient::getMessages (%d)\n", this, _messages.size());
+std::deque<OpenportMessage *> *OpenportClient::getMessages() {
+//    DEBUG_SERIAL.printf("%p OpenportClient::getMessages (%d)\n", this, _messages.size());
     return &_messages;
 }
 
@@ -292,53 +348,65 @@ void setTimeUsingSNTP() {
 }
 
 
-OpenportMessage::OpenportMessage(const char *rawData, uint16_t length) {
+OpenportMessage::OpenportMessage(char *rawData, uint16_t length) {
+    // message now becomes the owner of the rawData, so it should be freed when the message is deleted
+
+
     DEBUG_SERIAL.println("Creating a message from raw data");
-    DEBUG_SERIAL.println("IP: " + String((int) rawData[0]) + "." + String((int)rawData[1]) + "." + String((int)rawData[2]) + "." + String((int)rawData[3]));
-    DEBUG_SERIAL.println("port: " + String((int)rawData[4]) + "<< 8 + " + String((int)rawData[5]) );
-    DEBUG_SERIAL.println("type: " + String((int)rawData[6]));
+    DEBUG_SERIAL.println(
+            "IP: " + String((int) rawData[0]) + "." + String((int) rawData[1]) + "." + String((int) rawData[2]) + "." +
+            String((int) rawData[3]));
+    DEBUG_SERIAL.println("port: " + String((int) rawData[4]) + "<< 8 + " + String((int) rawData[5]));
+    DEBUG_SERIAL.println("type: " + String((int) rawData[6]));
 
     _rawData = rawData;
     _clientIp = IPAddress(rawData[0], rawData[1], rawData[2], rawData[3]);
     _clientPort = rawData[4] << 8 | rawData[5];
     _type = rawData[6];
-    _payload = rawData + 7;
-    _payloadSize = length - 7;
-    DEBUG_SERIAL.println("_payloadSize: " + String((int)_payloadSize));
+    _payloadSize = length - OPENPORT_MSG_HEADER_LENGTH;
+    DEBUG_SERIAL.printf("_payloadSize: %d\n", _payloadSize);
 
 }
 
-OpenportMessage::OpenportMessage(const char *payload, uint16_t payloadLength, uint8_t type, IPAddress clientIp, uint16_t clientPort) {
-    _payload = payload;
+OpenportMessage::OpenportMessage(const char *payload, uint16_t payloadLength, uint8_t type, IPAddress clientIp,
+                                 uint16_t clientPort) {
     _payloadSize = payloadLength;
     _type = type;
     _clientIp = clientIp;
     _clientPort = clientPort;
-}
 
-std::unique_ptr<char> OpenportMessage::getRawData() {
-    auto responseChar = new char[_payloadSize + 7];
-    responseChar[0] = _clientIp[0];
-    responseChar[1] = _clientIp[1];
-    responseChar[2] = _clientIp[2];
-    responseChar[3] = _clientIp[3];
-    responseChar[4] = _clientPort >> 8;
-    responseChar[5] = _clientPort & 0xFF;
-    responseChar[6] = _type;
+    _rawData = new char[_payloadSize + OPENPORT_MSG_HEADER_LENGTH];
+    _rawData[0] = _clientIp[0];
+    _rawData[1] = _clientIp[1];
+    _rawData[2] = _clientIp[2];
+    _rawData[3] = _clientIp[3];
+    _rawData[4] = _clientPort >> 8;
+    _rawData[5] = _clientPort & 0xFF;
+    _rawData[6] = _type;
     uint i = 0;
     while (i < _payloadSize) {
-        responseChar[7 + i] = _payload[i];
+        _rawData[OPENPORT_MSG_HEADER_LENGTH + i] = payload[i];
         i++;
     }
-    return std::unique_ptr<char>(responseChar);
+}
+
+OpenportMessage::~OpenportMessage() {
+    DEBUG_SERIAL.println("OpenportMessage::~OpenportMessage");
+    delete[] _rawData;
+}
+
+
+char* OpenportMessage::getRawData() {
+    return _rawData;
+
 }
 
 const char *OpenportMessage::getPayload() {
-    return _payload;
+    return _rawData + OPENPORT_MSG_HEADER_LENGTH;
 }
 
-int OpenportMessage::getRawDataLength() {
-    return _payloadSize + 7;
+uint16_t OpenportMessage::getRawDataLength() {
+    return _payloadSize + OPENPORT_MSG_HEADER_LENGTH;
 }
 
 int OpenportMessage::getType() {
@@ -356,4 +424,5 @@ uint16_t OpenportMessage::getClientPort() {
 uint16_t OpenportMessage::getPayloadSize() {
     return _payloadSize;
 }
+
 

@@ -3,9 +3,9 @@
 
 
 
-class OpenportEsp8266TCPServer : public websockets::network::Esp8266TcpServer {
+class OpenportEsp32TCPServer : public websockets::network::Esp32TcpServer {
 public:
-    explicit OpenportEsp8266TCPServer(OpenportWiFiServer server) : server(server) {}
+    explicit OpenportEsp32TCPServer(OpenportWiFiServer server) : server(server) {}
 
 protected:
     OpenportWiFiServer server;

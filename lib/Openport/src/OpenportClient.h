@@ -6,7 +6,12 @@
 #define ARDUINO_WEBSOCKETS_OPENPORTCLIENT_H
 
 #include <WiFiClientSecure.h>
+#ifdef ESP8266
 #include <ESP8266HTTPClient.h>
+#elif defined(ESP32)
+#include <HTTPClient.h>
+#endif
+
 
 #include <ArduinoJson.h>
 #include <deque>
@@ -23,28 +28,28 @@ enum ChannelOperation: std::int8_t
     ChOpClose    = 0x03,
 };
 
-
+const uint OPENPORT_MSG_HEADER_LENGTH = 7;
 class OpenportMessage {
 public:
-    OpenportMessage(const char *rawData, uint16_t length);
+    OpenportMessage(char *rawData, uint16_t length);
     OpenportMessage(const char *payload, uint16_t payloadLength, uint8_t type, IPAddress clientIp, uint16_t clientPort);
+    ~OpenportMessage();
     int getType();
     const char* getPayload();
     IPAddress getClientIp();
     uint16_t getClientPort();
 
-    std::unique_ptr<char> getRawData();
+    char * getRawData();
 
-    int getRawDataLength();
+    uint16_t getRawDataLength();
 
     uint16_t getPayloadSize();
 
 private:
     int8_t _type;
-    const char* _rawData;
+    char* _rawData;
     IPAddress _clientIp;
     uint16_t _clientPort;
-    const char *_payload;
     uint16_t _payloadSize;
 };
 
@@ -74,6 +79,7 @@ private:
     unsigned long _lastUpdate = millis();
     websockets::WebsocketsClient _webSocket;
     std::deque< OpenportMessage* > _messages;
+
     WiFiClientSecure _wifiClient;
 
     void webSocketEvent(websockets::WebsocketsEvent event, String data);
