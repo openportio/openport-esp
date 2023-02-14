@@ -37,39 +37,10 @@ websockets::network::TcpServer* tcpServer = openportEsp32TcpServer;
 websockets::WebsocketsServer ws_server = websockets::WebsocketsServer(tcpServer);
 
 std::unique_ptr<char> getHTTPResponse(uint8_t* request) {
+    DEBUG_SERIAL.printf("HTTP Request: %s\n", request);
+
     char ws_host[sizeof(openport_ws.getRemoteHost()) + sizeof(openport_ws.getRemotePort()) + 2];
     sprintf(ws_host, "%s:%d", openport_ws.getRemoteHost(), openport_ws.getRemotePort());
-
-//    ws_host = "notset";
-//    char response2[] = "HTTP/1.1 200 OK" \
-//     "\nContent-Type: text/html" \
-//     "\nConnection: close" \
-//     "\nRefresh: 5" \
-//    "\n" \
-//    "\n<!DOCTYPE HTML>\n" \
-//    "<html lang=\"en\">\n" \
-//    "<head>\n" \
-//    "<meta charset=\"UTF-8\">\n" \
-//    "<meta http-equiv=\"X-UA-Compatible\" content=\"IE=edge\">\n" \
-//    "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n" \
-//    "<title>Client</title>\n" \
-//    "</head>\n" \
-//    "<body>\n" \
-//    "<h1>Openport Client</h1>\n" \
-//    "<p><b id=\"last-msg\"></b></p>\n" \
-//    "   <script>\n" \
-//    "const ws = new WebSocket(\"ws://%s\");\n" \
-//    "ws.onopen = function (event) {\n" \
-//    "ws.send(\"Hello\");\n" \
-//    "}\n" \
-//    "\n" \
-//    "ws.onmessage = function (event) {\n" \
-//    "document.getElementById(\"last-msg\").innerText = event.data;\n" \
-//    "}\n" \
-//    "</script>\n" \
-//    "</body>\n" \
-//    "</html>\n" ;
-
 
     char response2[] = "HTTP/1.1 200 OK" \
      "\nContent-Type: text/html" \
@@ -79,9 +50,27 @@ std::unique_ptr<char> getHTTPResponse(uint8_t* request) {
     "\n<!DOCTYPE HTML>\n" \
     "<html lang=\"en\">\n" \
     "<head>\n" \
-    "<h1>Client1</h1>\n" \
+    "<meta charset=\"UTF-8\">\n" \
+    "<meta http-equiv=\"X-UA-Compatible\" content=\"IE=edge\">\n" \
+    "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n" \
+    "<title>Client</title>\n" \
     "</head>\n" \
+    "<body>\n" \
+    "<h1>Openport Client</h1>\n" \
+    "<p><b id=\"last-msg\"></b></p>\n" \
+    "   <script>\n" \
+    "const ws = new WebSocket(\"ws://%s\");\n" \
+    "ws.onopen = function (event) {\n" \
+    "ws.send(\"Hello\");\n" \
+    "}\n" \
+    "\n" \
+    "ws.onmessage = function (event) {\n" \
+    "document.getElementById(\"last-msg\").innerText = event.data;\n" \
+    "}\n" \
+    "</script>\n" \
+    "</body>\n" \
     "</html>\n" ;
+
     auto response = new char[sizeof(response2) + sizeof(ws_host)];
     sprintf(response, response2, ws_host);
 
@@ -94,7 +83,7 @@ void webserverLoop(WiFiServer *server ) {
     DEBUG_SERIAL.println("webserverloop here 1");
     // Needs to be initialized here, because otherwise the type information is lost.
     WiFiClient tmpClient;
-    OpenportWiFiClient tmpClient2 = OpenportWiFiClient(nullptr, nullptr);
+    OpenportWiFiClient tmpClient2 = OpenportWiFiClient();
     if (dynamic_cast<OpenportWiFiServer*>(server) != nullptr){
 //        DEBUG_SERIAL.println("checking for openport client");
         tmpClient2 = (dynamic_cast<OpenportWiFiServer *>(server))->available();
@@ -150,33 +139,29 @@ void webserverLoop(WiFiServer *server ) {
 }
 
 void openportWebserverLoop(OpenportWiFiServer *server ) {
-    DEBUG_SERIAL.printf("Server has %d clients \n", server->clients()->size());
     server->available();
-
+    DEBUG_SERIAL.printf("Server has %d clients \n", server->clients()->size());
 
     auto it = server->clients()->begin();
 
     while (it != server->clients()->end()) {
         OpenportWiFiClient* client = *it;
-        DEBUG_SERIAL.printf("Checking client %s:%d", client->remoteIP().toString().c_str(), client->remotePort());
+        DEBUG_SERIAL.printf("Checking client\n");
+        DEBUG_SERIAL.printf("Checking client %s:%d\n", client->remoteIP().toString().c_str(), client->remotePort());
 
         if (client->connected() && client->available()) {
-            uint8_t readBuffer[1024];
+            uint8_t requestBuffer[4096];
             Serial.println("client is available");
-            int i = 0;
-            // todo: this is not right, we should be reading until the end of the request
-            while (i < 1024 && client->available()) {
-                i = client->read(readBuffer, 1024);
-            }
+            int i = client->read(requestBuffer, 4096);
             Serial.printf("client read %d bytes\n", i);
-            Serial.println(reinterpret_cast<const char *>(readBuffer));
-            auto response = getHTTPResponse(readBuffer);
+            Serial.println(reinterpret_cast<const char *>(requestBuffer));
+            auto response = getHTTPResponse(requestBuffer);
 //            Serial.printf("response: %d\n", strlen(response));
 //            Serial.println(response);
             client->write(reinterpret_cast<const uint8_t*>(response.get()), strlen(response.get()));
             client->stop();
             delete client;
-            it = server->clients()->erase(it);
+//            it = server->clients()->erase(it);  // commented out because the delete function already does this
         } else {
             it++;
         }

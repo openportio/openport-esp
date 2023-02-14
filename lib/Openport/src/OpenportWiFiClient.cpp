@@ -1,10 +1,10 @@
 #include "OpenportWiFiClient.h"
-
+#include "OpenportWiFiServer.h"
 OpenportWiFiClient::OpenportWiFiClient() {
     _openportClient = nullptr;
 }
 
-OpenportWiFiClient::OpenportWiFiClient(OpenportClient* openportClient, OpenportMessage* msg) {
+OpenportWiFiClient::OpenportWiFiClient(OpenportClient* openportClient, OpenportMessage* msg, OpenportWiFiServer* openportWiFiServer) {
 //    DEBUG_SERIAL.printf("OpenportWiFiClient::OpenportWiFiClient %p \n", msg);
     if (msg != nullptr) {
 //        DEBUG_SERIAL.println("msg is not null");
@@ -22,6 +22,7 @@ OpenportWiFiClient::OpenportWiFiClient(OpenportClient* openportClient, OpenportM
 //        Serial.println("msg is null");
     }
     _openportClient = openportClient;
+    _openportWiFiServer = openportWiFiServer;
     _currentPosition = 0;
 }
 
@@ -50,14 +51,16 @@ int OpenportWiFiClient::read(uint8_t *buf, size_t size) {
         buf[i] = msg->getPayload()[i + _currentPosition];
     }
     if (bytesLeftToRead > size){  // still more to read
-        _currentPosition = msg->getPayloadSize() - bytesLeftToRead;
+        _currentPosition = _currentPosition + size;
+        DEBUG_SERIAL.printf("OpenportWiFiClient::read -> still more to read: %d\n", bytesLeftToRead - size);
+
     } else {
         DEBUG_SERIAL.println("OpenportWiFiClient::pop");
 
         _messages.pop_front();
         DEBUG_SERIAL.println("OpenportWiFiClient::delete");
 
-        free(msg);
+        delete msg;
         _currentPosition = 0;
     }
     return end;
@@ -65,19 +68,18 @@ int OpenportWiFiClient::read(uint8_t *buf, size_t size) {
 
 void OpenportWiFiClient::stop() {
     DEBUG_SERIAL.printf("OpenportWiFiClient::stop _openportClient: %p\n", _openportClient);
-    if (!this->operator bool()){
+    if (!this->operator bool() || _stopped){
         return;
     }
-
+    _stopped = true;
 
     OpenportMessage msg = OpenportMessage("", 0, ChOpClose, _remoteIP, _remotePort);
     _openportClient->send(&msg);
 
-    for (auto msg : _messages) {
-        free(msg);
+    for (auto msg1 : _messages) {
+        delete msg1;
     }
-    // todo: remove from lists?
-    // _openportWiFiServer->removeClient(this);
+    _openportWiFiServer->removeClient(this);
 }
 
 OpenportWiFiClient::operator bool() {
@@ -98,6 +100,8 @@ int OpenportWiFiClient::available() {
 }
 
 IPAddress OpenportWiFiClient::remoteIP() {
+    DEBUG_SERIAL.printf("Return remoteIP:");
+    DEBUG_SERIAL.printf("Return remoteIP: %s \n", _remoteIP.toString().c_str());
     return _remoteIP;
 }
 

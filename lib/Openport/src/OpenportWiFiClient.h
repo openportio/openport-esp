@@ -7,10 +7,12 @@
 
 #define DEBUG_SERIAL Serial
 
+class OpenportWiFiServer;
+
 class OpenportWiFiClient : public WiFiClient {
 public:
     OpenportWiFiClient();
-    OpenportWiFiClient(OpenportClient* openportClient, OpenportMessage* msg);
+    OpenportWiFiClient(OpenportClient* openportClient, OpenportMessage* msg, OpenportWiFiServer* openportWiFiServer);
     size_t write(const uint8_t *buf, size_t size) override;
     int available() override;
     int read(uint8_t *buf, size_t size) override;
@@ -26,6 +28,8 @@ private:
     uint16_t _remotePort;
     IPAddress _remoteIP;
     OpenportClient* _openportClient;
+    OpenportWiFiServer* _openportWiFiServer;
+    bool _stopped = false;
 };
 
 #endif //ARDUINO_WEBSOCKETS_OPENPORT_WIFI_CLIENT_H

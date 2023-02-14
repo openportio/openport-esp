@@ -34,10 +34,12 @@ public:
 
     std::deque<OpenportWiFiClient *> * clients();
 
+    void removeClient(OpenportWiFiClient *client);
+
 private:
     OpenportClient *_openport;
     std::deque<OpenportWiFiClient*> _clients;
-    std::deque<OpenportWiFiClient*> _new_clients;
+    std::deque<OpenportWiFiClient*> _newClients;
     int _findClient(IPAddress clientIp, uint16_t clientPort);
     void _processMessages();
 };

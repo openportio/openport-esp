@@ -100,13 +100,10 @@ void OpenportClient::send(OpenportMessage *msg) {
 void OpenportClient::webSocketMessage(const websockets::WebsocketsMessage message) {
     Serial.print("Got Message: ");
     Serial.println(message.data());
-
     uint length = message.length();
-    const char *data = message.c_str();
-
     DEBUG_SERIAL.printf("get binary length: %u\n", length);
     if (length > 6) {
-        auto msg = new OpenportMessage(const_cast<char*>(data), length);
+        auto msg = new OpenportMessage(message.c_str(), length);
         _messages.push_back(msg);
         DEBUG_SERIAL.print("Messages in queue: ");
         DEBUG_SERIAL.println(_messages.size());
@@ -348,10 +345,7 @@ void setTimeUsingSNTP() {
 }
 
 
-OpenportMessage::OpenportMessage(char *rawData, uint16_t length) {
-    // message now becomes the owner of the rawData, so it should be freed when the message is deleted
-
-
+OpenportMessage::OpenportMessage(const char *rawData, uint16_t length) {
     DEBUG_SERIAL.println("Creating a message from raw data");
     DEBUG_SERIAL.println(
             "IP: " + String((int) rawData[0]) + "." + String((int) rawData[1]) + "." + String((int) rawData[2]) + "." +
@@ -359,13 +353,13 @@ OpenportMessage::OpenportMessage(char *rawData, uint16_t length) {
     DEBUG_SERIAL.println("port: " + String((int) rawData[4]) + "<< 8 + " + String((int) rawData[5]));
     DEBUG_SERIAL.println("type: " + String((int) rawData[6]));
 
-    _rawData = rawData;
+    _rawData = new char[length];
+    memcpy(_rawData, rawData, length);
     _clientIp = IPAddress(rawData[0], rawData[1], rawData[2], rawData[3]);
     _clientPort = rawData[4] << 8 | rawData[5];
     _type = rawData[6];
     _payloadSize = length - OPENPORT_MSG_HEADER_LENGTH;
     DEBUG_SERIAL.printf("_payloadSize: %d\n", _payloadSize);
-
 }
 
 OpenportMessage::OpenportMessage(const char *payload, uint16_t payloadLength, uint8_t type, IPAddress clientIp,
@@ -391,7 +385,7 @@ OpenportMessage::OpenportMessage(const char *payload, uint16_t payloadLength, ui
 }
 
 OpenportMessage::~OpenportMessage() {
-    DEBUG_SERIAL.println("OpenportMessage::~OpenportMessage");
+    DEBUG_SERIAL.printf("OpenportMessage::~OpenportMessage %d\n", _payloadSize);
     delete[] _rawData;
 }
 

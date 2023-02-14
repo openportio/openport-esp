@@ -31,7 +31,7 @@ enum ChannelOperation: std::int8_t
 const uint OPENPORT_MSG_HEADER_LENGTH = 7;
 class OpenportMessage {
 public:
-    OpenportMessage(char *rawData, uint16_t length);
+    OpenportMessage(const char *rawData, uint16_t length);
     OpenportMessage(const char *payload, uint16_t payloadLength, uint8_t type, IPAddress clientIp, uint16_t clientPort);
     ~OpenportMessage();
     int getType();

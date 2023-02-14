@@ -7,7 +7,7 @@
 OpenportWiFiServer::OpenportWiFiServer(OpenportClient *openport) : WiFiServer(0) {
     _openport = openport;
     _clients = std::deque<OpenportWiFiClient*>();
-    _new_clients = std::deque<OpenportWiFiClient*>();
+    _newClients = std::deque<OpenportWiFiClient*>();
 }
 
 int OpenportWiFiServer::_findClient(IPAddress clientIp, uint16_t clientPort) {
@@ -28,14 +28,14 @@ OpenportWiFiClient OpenportWiFiServer::available(uint8_t *status) {
 //    DEBUG_SERIAL.println("out of _openport->loop    ");
     _processMessages();
 
-    if (! _new_clients.empty()) {
-        auto client = _new_clients.front();
+    if (! _newClients.empty()) {
+        auto client = _newClients.front();
 //        DEBUG_SERIAL.println("popping new client");
-        _new_clients.pop_front();
+        _newClients.pop_front();
 //        DEBUG_SERIAL.println("returning client");
         return *client;
     }
-    auto client = OpenportWiFiClient(nullptr, nullptr);
+    auto client = OpenportWiFiClient(nullptr, nullptr, nullptr);
 //    DEBUG_SERIAL.println("returning empty client");
 
     return client;
@@ -49,17 +49,18 @@ void OpenportWiFiServer::_processMessages() {
         msg = messages->front();
         messages->pop_front();
         DEBUG_SERIAL.printf("Got a msg in the wifi server of size: %d\n", msg->getPayloadSize());
-        DEBUG_SERIAL.println(msg->getType());
+        DEBUG_SERIAL.printf("Got a msg with payload %s\n", msg->getPayload());
+        DEBUG_SERIAL.printf("msg type: %d\n", msg->getType());
         if (msg->getType() == ChOpNew) {
-            OpenportWiFiClient* newClient = new OpenportWiFiClient(_openport, msg);
+            OpenportWiFiClient* newClient = new OpenportWiFiClient(_openport, msg, this);
             _clients.push_back(newClient);
             // TODO: remove clients when they are closed
             DEBUG_SERIAL.printf("Adding client %s:%d: Nr of clients: %d", newClient->remoteIP().toString().c_str(), newClient->remotePort(), _clients.size());
             assert(msg->getClientIp() == newClient->remoteIP());
             DEBUG_SERIAL.println("IPs match");
             assert(msg->getClientPort() == newClient->remotePort());
-            _new_clients.push_back(newClient);
-            free(msg);
+            _newClients.push_back(newClient);
+            delete msg;
         } else if (msg->getType() == ChOpCont) {
             auto oldClientIndex = _findClient(msg->getClientIp(), msg->getClientPort());
             DEBUG_SERIAL.printf("finding client: Nr of clients: %d\n", _clients.size());
@@ -69,7 +70,7 @@ void OpenportWiFiServer::_processMessages() {
                 DEBUG_SERIAL.printf("client found: Nr of clients: %d\n", _clients.size());
             } else{
                 DEBUG_SERIAL.println("Could not find client");
-                free(msg);
+                delete msg;
             }
         } else if (msg->getType() == ChOpClose) {
             DEBUG_SERIAL.print("Got a close msg");
@@ -84,6 +85,7 @@ void OpenportWiFiServer::_processMessages() {
         } else {
             DEBUG_SERIAL.print("Unknown msg type:");
             DEBUG_SERIAL.println(msg->getType());
+            delete msg;
         }
     }
     DEBUG_SERIAL.println("out while loop ");
@@ -91,11 +93,20 @@ void OpenportWiFiServer::_processMessages() {
 
 bool OpenportWiFiServer::hasClient() {
     _processMessages();
-    DEBUG_SERIAL.printf("OpenportWiFiServer::hasClient: %d", _new_clients.size());
-    return !_new_clients.empty();
+    DEBUG_SERIAL.printf("OpenportWiFiServer::hasClient: %d", _newClients.size());
+    return !_newClients.empty();
 }
 
 std::deque<OpenportWiFiClient*>* OpenportWiFiServer::clients() {
     return &_clients;
+}
+
+void OpenportWiFiServer::removeClient(OpenportWiFiClient *client) {
+    auto oldClientIndex = _findClient(client->remoteIP(), client->remotePort());
+    if (oldClientIndex >=0) {
+        DEBUG_SERIAL.printf("Client found at index: %d\n", oldClientIndex);
+        _clients.erase(_clients.begin() + oldClientIndex);
+    }
+    DEBUG_SERIAL.println("Removed client");
 }
 
