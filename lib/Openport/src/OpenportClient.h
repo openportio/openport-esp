@@ -6,10 +6,13 @@
 #define ARDUINO_WEBSOCKETS_OPENPORTCLIENT_H
 
 #include <WiFiClientSecure.h>
+
 #ifdef ESP8266
 #include <ESP8266HTTPClient.h>
 #elif defined(ESP32)
+
 #include <HTTPClient.h>
+
 #endif
 
 
@@ -20,26 +23,32 @@
 
 #define DEBUG_SERIAL Serial
 
-enum ChannelOperation: std::int8_t
-{
+enum ChannelOperation : std::int8_t {
     ChOpUnknown = 0x00,
-    ChOpNew      = 0x01,
-    ChOpCont     = 0x02,
-    ChOpClose    = 0x03,
+    ChOpNew = 0x01,
+    ChOpCont = 0x02,
+    ChOpClose = 0x03,
 };
 
 const uint OPENPORT_MSG_HEADER_LENGTH = 7;
+
 class OpenportMessage {
 public:
     OpenportMessage(const char *rawData, uint16_t length);
+
     OpenportMessage(const char *payload, uint16_t payloadLength, uint8_t type, IPAddress clientIp, uint16_t clientPort);
+
     ~OpenportMessage();
+
     int getType();
-    const char* getPayload();
+
+    const char *getPayload();
+
     IPAddress getClientIp();
+
     uint16_t getClientPort();
 
-    char * getRawData();
+    char *getRawData();
 
     uint16_t getRawDataLength();
 
@@ -47,7 +56,7 @@ public:
 
 private:
     int8_t _type;
-    char* _rawData;
+    char *_rawData;
     IPAddress _clientIp;
     uint16_t _clientPort;
     uint16_t _payloadSize;
@@ -56,8 +65,13 @@ private:
 
 class OpenportClient {
 public:
-    OpenportClient(char *host, char *key_token);
+    OpenportClient(const char *host, const char *key_binding_token, const char *unique_client_id, int local_port);
 
+    OpenportClient(const char *host, const char *key_binding_token);
+
+    OpenportClient(const char *host, const char *key_binding_token, int local_port);
+
+    ~OpenportClient();
     bool connect();
 
     void loop();
@@ -65,20 +79,25 @@ public:
     const char *getRemoteHost();
 
     int getRemotePort();
+
     void send(OpenportMessage *msg);
 
     std::unique_ptr<char> getRemoteAddress();
-    std::deque<OpenportMessage*>* getMessages();
+
+    std::deque<OpenportMessage *> *getMessages();
 
 private:
     char *_host;
-    String _ws_host;
-    char *_key_token;
-    String _session_token{};
-    int _server_port{};
+    char *_key_binding_token;
+    char *_unique_client_id;
+    int _local_port = -1;
+    char *_ws_host = new char[1];
+    char *_session_token = new char[1];
+    int _server_port = -1;
+
     unsigned long _lastUpdate = millis();
     websockets::WebsocketsClient _webSocket;
-    std::deque< OpenportMessage* > _messages;
+    std::deque<OpenportMessage *> _messages;
 
     WiFiClientSecure _wifiClient;
 
@@ -91,6 +110,7 @@ private:
     void requestWSPortForward();
 
     bool connectWS();
+
 };
 
 void setTimeUsingSNTP();

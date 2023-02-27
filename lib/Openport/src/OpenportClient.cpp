@@ -1,7 +1,7 @@
 //
 // Created by Jan De Bleser on 19/01/23.
 //
-
+#include <string.h>
 #include "OpenportClient.h"
 //#include <ArduinoJson.h>
 #include <ArduinoJson.h>
@@ -59,10 +59,22 @@ X509List *serverTrustedCA = new X509List(ssl_ca_cert);
 #endif
 
 
-OpenportClient::OpenportClient(char *host, char *key_token) {
-    _host = host;
-    _key_token = key_token;
+OpenportClient::OpenportClient(const char *host, const char *key_binding_token, const char *unique_client_id,
+                               int local_port) {
+    _host = new char[strlen(host) + 1];
+    strncpy(_host, host, strlen(host) + 1);
+
+    _key_binding_token = new char[strlen(key_binding_token) + 1];
+    strncpy(_key_binding_token, key_binding_token, strlen(key_binding_token) + 1);
+
+    _unique_client_id = new char[strlen(unique_client_id) + 1];
+    strncpy(_unique_client_id, unique_client_id, strlen(unique_client_id) + 1);
+
+    _local_port = local_port;
 //    _messages = std::deque< OpenportMessage* >();
+
+    _ws_host[0] = '\0';
+    _session_token[0] = '\0';
 
     DEBUG_SERIAL.printf("&_wifiClient: %p", &_wifiClient);
 //#ifdef ESP8266
@@ -83,6 +95,16 @@ OpenportClient::OpenportClient(char *host, char *key_token) {
 //    _webSocket = websockets::WebsocketsClient(sharedPtr);
 }
 
+OpenportClient::OpenportClient(const char *host, const char *key_binding_token) :
+        OpenportClient(host, key_binding_token, WiFi.macAddress().c_str(), -1) {
+}
+
+
+OpenportClient::OpenportClient(const char *host, const char *key_binding_token, int local_port) :
+        OpenportClient(host, key_binding_token, WiFi.macAddress().c_str(), local_port) {
+}
+
+
 void addrFromPayload(char *address, const char *payload) {
     sprintf(address, "%d.%d.%d.%d:%d", int(payload[0]), int(payload[1]), int(payload[2]), int(payload[3]),
             int((payload[4] << 8) + payload[5]));
@@ -92,7 +114,7 @@ void OpenportClient::send(OpenportMessage *msg) {
     DEBUG_SERIAL.println("OpenportClient::Sending message: ");
     DEBUG_SERIAL.println(msg->getPayload());
 //    DEBUG_SERIAL.println("OpenportClient::Raw message: ");
-    char* rawData = msg->getRawData();
+    char *rawData = msg->getRawData();
 //    DEBUG_SERIAL.println(rawData);
     _webSocket.sendBinary(rawData, msg->getRawDataLength());
 }
@@ -163,15 +185,16 @@ bool OpenportClient::sendHttpRequest() {
 //    httpClient.begin(_wifiClient, String(path));
 
     WiFiClientSecure tmpClient = WiFiClientSecure();
-        char *tmpCrt = new char[strlen(ssl_ca_cert) + 1];
-     memcpy(tmpCrt, ssl_ca_cert, strlen(ssl_ca_cert) + 1);
+    char *tmpCrt = new char[strlen(ssl_ca_cert) + 1];
+    memcpy(tmpCrt, ssl_ca_cert, strlen(ssl_ca_cert) + 1);
 
     tmpClient.setCACert(tmpCrt);
     httpClient.begin(tmpClient, String(path));
 
     httpClient.addHeader("Content-Type", "application/x-www-form-urlencoded");
     char postData[128];
-    sprintf(postData, "ws_token=%s", _key_token);
+    sprintf(postData, "key_binding_token=%s&unique_client_id=%s&local_port=%d", _key_binding_token, _unique_client_id,
+            _local_port);
     Serial.println(postData);
 
     int responseCode = httpClient.POST(postData);
@@ -183,8 +206,15 @@ bool OpenportClient::sendHttpRequest() {
         DynamicJsonDocument doc(1024);
         deserializeJson(doc, payload);
         _server_port = doc["server_port"];
-        _session_token = doc["session_token"].as<String>();
-        _ws_host = doc["server_ip"].as<String>();
+
+        char *session_token = (char *) doc["session_token"].as<String>().c_str();
+        delete _session_token;
+        _session_token = new char[strlen(session_token) + 1];
+        memcpy(_session_token, session_token, strlen(session_token) + 1);
+        char *ws_host = (char *) doc["server_ip"].as<String>().c_str();
+        delete _ws_host;
+        _ws_host = new char[strlen(ws_host) + 1];
+        memcpy(_ws_host, ws_host, strlen(ws_host) + 1);
     } else {
         Serial.print("HTTP Response code: ");
         Serial.println(responseCode);
@@ -230,7 +260,7 @@ bool OpenportClient::connectWS() {// Connect websocket
     _webSocket.onEvent(onEventCallback);
 
     char fullPath[128];
-    sprintf(fullPath, "wss://%s:443/ws", _ws_host.c_str());
+    sprintf(fullPath, "wss://%s:443/ws", _ws_host);
     Serial.print("WS Connecting to ");
     Serial.println(fullPath);
     Serial.printf("Free Memory at OpenportClient::connectWS 1: %d\n", ESP.getFreeHeap());
@@ -307,7 +337,7 @@ void OpenportClient::loop() {
 }
 
 const char *OpenportClient::getRemoteHost() {
-    return _ws_host.c_str();
+    return _ws_host;
 }
 
 int OpenportClient::getRemotePort() {
@@ -316,13 +346,22 @@ int OpenportClient::getRemotePort() {
 
 std::unique_ptr<char> OpenportClient::getRemoteAddress() {
     char *remoteAddress = new char[128];
-    sprintf(remoteAddress, "%s:%d", _ws_host.c_str(), _server_port);
+    sprintf(remoteAddress, "%s:%d", _ws_host, _server_port);
     return std::unique_ptr<char>(remoteAddress);
 }
 
 std::deque<OpenportMessage *> *OpenportClient::getMessages() {
 //    DEBUG_SERIAL.printf("%p OpenportClient::getMessages (%d)\n", this, _messages.size());
     return &_messages;
+}
+
+OpenportClient::~OpenportClient() {
+    _webSocket.close();
+    delete _host;
+    delete _key_binding_token;
+    delete _unique_client_id;
+    delete _ws_host;
+    delete _session_token;
 }
 
 
@@ -390,7 +429,7 @@ OpenportMessage::~OpenportMessage() {
 }
 
 
-char* OpenportMessage::getRawData() {
+char *OpenportMessage::getRawData() {
     return _rawData;
 
 }

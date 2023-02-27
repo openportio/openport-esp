@@ -71,9 +71,8 @@ std::unique_ptr<char> getHTTPResponse(uint8_t* request) {
     "</body>\n" \
     "</html>\n" ;
 
-    auto response = new char[sizeof(response2) + sizeof(ws_host)];
+    auto response = new char[strlen(response2) + strlen(ws_host)+2];
     sprintf(response, response2, ws_host);
-
     return std::unique_ptr<char>(response);
 }
 
