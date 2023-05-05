@@ -65,11 +65,11 @@ private:
 
 class OpenportClient {
 public:
-    OpenportClient(const char *host, const char *key_binding_token, const char *unique_client_id, int local_port);
+    OpenportClient(const char *host, const char *ws_key_token, const char *unique_client_id, int local_port);
 
-    OpenportClient(const char *host, const char *key_binding_token);
+    OpenportClient(const char *host, const char *ws_key_token);
 
-    OpenportClient(const char *host, const char *key_binding_token, int local_port);
+    OpenportClient(const char *host, const char *ws_key_token, int local_port);
 
     ~OpenportClient();
     bool connect();
@@ -88,7 +88,7 @@ public:
 
 private:
     char *_host;
-    char *_key_binding_token;
+    char *_ws_key_token;
     char *_unique_client_id;
     int _local_port = -1;
     char *_ws_host = new char[1];

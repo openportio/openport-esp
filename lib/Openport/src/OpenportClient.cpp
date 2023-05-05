@@ -59,13 +59,13 @@ X509List *serverTrustedCA = new X509List(ssl_ca_cert);
 #endif
 
 
-OpenportClient::OpenportClient(const char *host, const char *key_binding_token, const char *unique_client_id,
+OpenportClient::OpenportClient(const char *host, const char *ws_key_token, const char *unique_client_id,
                                int local_port) {
     _host = new char[strlen(host) + 1];
     strncpy(_host, host, strlen(host) + 1);
 
-    _key_binding_token = new char[strlen(key_binding_token) + 1];
-    strncpy(_key_binding_token, key_binding_token, strlen(key_binding_token) + 1);
+    _ws_key_token = new char[strlen(ws_key_token) + 1];
+    strncpy(_ws_key_token, ws_key_token, strlen(ws_key_token) + 1);
 
     _unique_client_id = new char[strlen(unique_client_id) + 1];
     strncpy(_unique_client_id, unique_client_id, strlen(unique_client_id) + 1);
@@ -95,13 +95,13 @@ OpenportClient::OpenportClient(const char *host, const char *key_binding_token, 
 //    _webSocket = websockets::WebsocketsClient(sharedPtr);
 }
 
-OpenportClient::OpenportClient(const char *host, const char *key_binding_token) :
-        OpenportClient(host, key_binding_token, WiFi.macAddress().c_str(), -1) {
+OpenportClient::OpenportClient(const char *host, const char *ws_key_token) :
+        OpenportClient(host, ws_key_token, WiFi.macAddress().c_str(), -1) {
 }
 
 
-OpenportClient::OpenportClient(const char *host, const char *key_binding_token, int local_port) :
-        OpenportClient(host, key_binding_token, WiFi.macAddress().c_str(), local_port) {
+OpenportClient::OpenportClient(const char *host, const char *ws_key_token, int local_port) :
+        OpenportClient(host, ws_key_token, WiFi.macAddress().c_str(), local_port) {
 }
 
 
@@ -193,7 +193,7 @@ bool OpenportClient::sendHttpRequest() {
 
     httpClient.addHeader("Content-Type", "application/x-www-form-urlencoded");
     char postData[128];
-    sprintf(postData, "key_binding_token=%s&unique_client_id=%s&local_port=%d", _key_binding_token, _unique_client_id,
+    sprintf(postData, "ws_key_token=%s&unique_client_id=%s&local_port=%d", _ws_key_token, _unique_client_id,
             _local_port);
     Serial.println(postData);
 
@@ -358,7 +358,7 @@ std::deque<OpenportMessage *> *OpenportClient::getMessages() {
 OpenportClient::~OpenportClient() {
     _webSocket.close();
     delete _host;
-    delete _key_binding_token;
+    delete _ws_key_token;
     delete _unique_client_id;
     delete _ws_host;
     delete _session_token;

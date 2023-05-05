@@ -20,8 +20,8 @@ const char *password = "";
 #define DEBUG_SERIAL Serial
 
 WiFiServer server(80);
-OpenportClient openport_http = OpenportClient("test.openport.io", "blahblahblah");
-OpenportClient openport_ws = OpenportClient("test.openport.io", "blahblahblah");
+OpenportClient openport_http = OpenportClient("test.openport.io", "asdf", 80);
+OpenportClient openport_ws = OpenportClient("test.openport.io", "asdf", 81);
 
 OpenportWiFiServer openport_http_server = OpenportWiFiServer(&openport_http);
 OpenportWiFiServer openport_ws_server = OpenportWiFiServer(&openport_ws);
@@ -34,7 +34,7 @@ websockets::network::TcpServer* tcpServer = openportEsp8266TcpServer;
 OpenportEsp32TCPServer* openportEsp32TcpServer = new OpenportEsp32TCPServer(openport_ws_server);
 websockets::network::TcpServer* tcpServer = openportEsp32TcpServer;
 #endif
-websockets::WebsocketsServer ws_server = websockets::WebsocketsServer(tcpServer);
+//websockets::WebsocketsServer ws_server = websockets::WebsocketsServer(tcpServer);
 
 std::unique_ptr<char> getHTTPResponse(uint8_t* request) {
     DEBUG_SERIAL.printf("HTTP Request: %s\n", request);
@@ -206,31 +206,31 @@ void setup() {
 //    ws_server.listen(81);
     Serial.printf("Free Memory at the end of init: %d\n", ESP.getFreeHeap());
 }
-
-void wsServerLoop() {
-    Serial.print("ws_server.poll()... ");
-    if (!ws_server.poll()) {
-        return;
-    }
-    websockets::WebsocketsClient client = ws_server.accept();
-    Serial.print("client.available()...\n ");
-
-    if(client.available()) {
-        Serial.print("Got a ws client: ");
-
-        websockets::WebsocketsMessage msg = client.readBlocking();
-
-        // log
-        Serial.print("Got WS Message: ");
-        Serial.println(msg.data());
-
-        // return echo
-        client.send("Echo: " + msg.data());
-
-        // close the connection
-        client.close();
-    }
-}
+//
+//void wsServerLoop() {
+//    Serial.print("ws_server.poll()... ");
+//    if (!ws_server.poll()) {
+//        return;
+//    }
+//    websockets::WebsocketsClient client = ws_server.accept();
+//    Serial.print("client.available()...\n ");
+//
+//    if(client.available()) {
+//        Serial.print("Got a ws client: ");
+//
+//        websockets::WebsocketsMessage msg = client.readBlocking();
+//
+//        // log
+//        Serial.print("Got WS Message: ");
+//        Serial.println(msg.data());
+//
+//        // return echo
+//        client.send("Echo: " + msg.data());
+//
+//        // close the connection
+//        client.close();
+//    }
+//}
 int previousMemory = 0;
 void loop() {
 
