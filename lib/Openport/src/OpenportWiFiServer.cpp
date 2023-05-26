@@ -42,7 +42,7 @@ OpenportWiFiClient OpenportWiFiServer::available(uint8_t *status) {
 }
 
 void OpenportWiFiServer::_processMessages() {
-    DEBUG_SERIAL.println("Processing messages");
+//    DEBUG_SERIAL.println("Processing messages");
     OpenportMessage* msg;
     std::deque<OpenportMessage *>* messages = _openport->getMessages();
     while(!messages->empty()) {
@@ -88,7 +88,7 @@ void OpenportWiFiServer::_processMessages() {
             delete msg;
         }
     }
-    DEBUG_SERIAL.println("out while loop ");
+//    DEBUG_SERIAL.println("out while loop ");
 }
 
 bool OpenportWiFiServer::hasClient() {

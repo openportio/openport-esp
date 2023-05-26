@@ -18,8 +18,8 @@ const char *password = "";
 #define DEBUG_SERIAL Serial
 
 WiFiServer server(80);
-OpenportClient openport_http = OpenportClient("test.openport.io", "asdf", 80);
-OpenportClient openport_ws = OpenportClient("test.openport.io", "asdf", 81);
+OpenportClient openport_http = OpenportClient("openport.io", "thisisatoken", 80);
+OpenportClient openport_ws = OpenportClient("openport.io", "thisisatoken", 81);
 
 OpenportWiFiServer openport_http_server = OpenportWiFiServer(&openport_http);
 OpenportWiFiServer openport_ws_server = OpenportWiFiServer(&openport_ws);
@@ -235,13 +235,13 @@ void loop() {
 //    openport_http.loop();
 //    openport_ws.loop();
 //    webserverLoop(&server);
-    DEBUG_SERIAL.println("webserverLoop");
+//    DEBUG_SERIAL.println("webserverLoop");
 //    webserverLoop(&openport_http_server);
     openportWebserverLoop(&openport_http_server);
 //    DEBUG_SERIAL.println("looping");
 //    wsServerLoop();
-    Serial.printf("Free Memory: %d\n", ESP.getFreeHeap());
-    DEBUG_SERIAL.printf("Lost Memory: %d\n", previousMemory - ESP.getFreeHeap());
+//    Serial.printf("Free Memory: %d\n", ESP.getFreeHeap());
+//    DEBUG_SERIAL.printf("Lost Memory: %d\n", previousMemory - ESP.getFreeHeap());
     previousMemory = ESP.getFreeHeap();
     // loop delay needs to be less than 5000, or the ws client times out
     delay(100);
