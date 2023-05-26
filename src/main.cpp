@@ -12,14 +12,13 @@
 #include <typeinfo>
 //#include <ArduinoWebsockets.h>
 
-const char *ssid = "";
-const char *password = "";
+#include "secrets.h"
 
 #define DEBUG_SERIAL Serial
 
 WiFiServer server(80);
-OpenportClient openport_http = OpenportClient("openport.io", "thisisatoken", 80);
-OpenportClient openport_ws = OpenportClient("openport.io", "thisisatoken", 81);
+OpenportClient openport_http = OpenportClient("openport.io", OPENPORT_TOKEN, 80);
+OpenportClient openport_ws = OpenportClient("openport.io", OPENPORT_TOKEN, 81);
 
 OpenportWiFiServer openport_http_server = OpenportWiFiServer(&openport_http);
 OpenportWiFiServer openport_ws_server = OpenportWiFiServer(&openport_ws);
@@ -179,7 +178,7 @@ void setup() {
     }
     Serial.printf("Free Memory at BOOT: %d\n", ESP.getFreeHeap());
 
-    WiFi.begin(ssid, password);
+    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
     while (WiFi.status() != WL_CONNECTED) {
         delay(500);
         Serial.print(".");
