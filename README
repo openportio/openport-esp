@@ -1,4 +1,0 @@
-Set
-    #define CONFIG_ARDUINO_LOOP_STACK_SIZE 18192
-in sdkconfig.h to increase the stack size of the loop task.
-This fixes issues with the ESP crashing when connecting over SSL.

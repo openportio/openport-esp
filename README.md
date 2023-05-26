@@ -15,6 +15,11 @@ dependencies:
     git: https://github.com/openportio/openport-esp.git
 ```
 
+You will need to use a token to authenticate the client. 
+Since the library is still in BETA, please contact
+[sales@openport.io](mailto:sales@openport.io)  to get a token.
+
+
 Usage
 ---
 
