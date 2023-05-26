@@ -14,7 +14,7 @@
 // USERTrust RSA Certification Authority
 // Expires Mon, 18 Jan 2038 23:59:59 GMT
 
-const char ssl_ca_cert[] PROGMEM = \
+static const char ssl_ca_cert[] PROGMEM = \
 "-----BEGIN CERTIFICATE-----\n" \
 "MIIF3jCCA8agAwIBAgIQAf1tMPyjylGoG7xkDjUDLTANBgkqhkiG9w0BAQwFADCB\n" \
 "iDELMAkGA1UEBhMCVVMxEzARBgNVBAgTCk5ldyBKZXJzZXkxFDASBgNVBAcTC0pl\n" \
@@ -199,13 +199,15 @@ bool OpenportClient::sendHttpRequest() {
 
         DynamicJsonDocument doc(1024);
         deserializeJson(doc, payload);
+
         _server_port = doc["server_port"];
 
-        char *session_token = (char *) doc["session_token"].as<String>().c_str();
+        const char *session_token = doc["session_token"];
         delete _session_token;
         _session_token = new char[strlen(session_token) + 1];
         memcpy(_session_token, session_token, strlen(session_token) + 1);
-        char *ws_host = (char *) doc["server_ip"].as<String>().c_str();
+
+        const char * ws_host = doc["server_ip"];
         delete _ws_host;
         _ws_host = new char[strlen(ws_host) + 1];
         memcpy(_ws_host, ws_host, strlen(ws_host) + 1);
