@@ -1,1 +1,1 @@
- sudo chown jan:jan /dev/ttyUSB0
+sudo chown $(whoami):$(id -g -n) /dev/ttyUSB0

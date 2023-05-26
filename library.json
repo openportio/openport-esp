@@ -1,0 +1,27 @@
+{
+  "name": "Openport-ESP",
+  "version": "0.0.1",
+  "description": "An open source client for Openport that works on the ESP32 and ESP8266",
+  "keywords": "openport, reverse-ssh, port-forwarding",
+  "repository":
+  {
+    "type": "git",
+    "url": "https://github.com/openportio/openport-esp"
+  },
+  "authors":
+  [
+    {
+      "name": "Jan De Bleser",
+      "email": "jan@openport.io",
+      "url": "https://openport.io"
+    }
+  ],
+  "license": "MIT",
+  "homepage": "https://www.openport.io/",
+  "dependencies": {
+    "Links2004/WebSockets": "^2.4.0",
+    "bblanchon/ArduinoJson": "^6.20.0"
+  },
+  "frameworks": "*",
+  "platforms": "*"
+}
