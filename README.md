@@ -55,12 +55,17 @@ void loop(){
 
 Important:
 ---
-To run this library smoothly with SSL, you need to add (or overwrite) the following line in your sdkconfig.h file:
+- To run this library smoothly with SSL, you need to add (or overwrite) the following line in your sdkconfig.h file:
 
-```
-#define CONFIG_ARDUINO_LOOP_STACK_SIZE 18192
-```
+    ```
+    #define CONFIG_ARDUINO_LOOP_STACK_SIZE 18192
+    ```
 
+- This library is still in BETA. Use at your own risk.
 Examples
 ---
 See the examples folder for more information.
+
+License
+---
+MIT license.
